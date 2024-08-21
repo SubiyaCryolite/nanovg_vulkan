@@ -1,3 +1,18 @@
+# Background
+
+This repo is based on the amazing work done by [danilw](https://github.com/danilw/) in the archived repository [danilw/nanovg_vulkan](https://github.com/danilw/nanovg_vulkan)
+
+# Goal
+
+To extend and optimise the Vulkan 1.0 implementation of NanoVG. Specifically by doing the following:
+ - Optimising pipeline selection
+ - Optimising pipeline creation
+ - Simplifying code
+ - Using Push constants where possible
+ - Possibly supporting SSBOs for MDI
+
+---
+
 # 2024 - Im archive this.
 
 # Just use IMGUI
@@ -89,7 +104,7 @@ About *RenderPass integration* - copy paste code from *integration* examples abo
 ___
 
 ___
-## 2023 update - huge performance improvement thanks to [**@SubiyaCryolite**](https://github.com/SubiyaCryolite) 
+## 2023 update - huge performance improvement thanks to [**@SubiyaCryolite**](https://github.com/SubiyaCryolite)
 
 SubiyaCryolite pull request [Optimizations > Cached Descriptor Sets, Implied Multiple Frames in Flight, Fencing for faster perf](https://github.com/danilw/nanovg_vulkan/pull/7)
 
@@ -98,7 +113,7 @@ SubiyaCryolite pull request [Optimizations > Cached Descriptor Sets, Implied Mul
 -   Under `example_vulkan`, using `vkWaitForFences` to control rendering as opposed to `vkQueueWaitIdle` (seems to be the biggest perf booster). This change also has implied "multiple frames in flight" as dictated by the swap-chain image count.
 -   Using persisted mapped buffers via `VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT` instead of `VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT` , allows to skip calls to `vkMap/UnmapMemory` per frame
 
-*Link to version before this change [5ba9d31](https://github.com/danilw/nanovg_vulkan/tree/5ba9d31165cebfb06abb9929ee9aa69a0abe86b1), this change [10d5211](https://github.com/danilw/nanovg_vulkan/commit/10d5211ac678f615a58462c270dff9eb7ffe4872).* 
+*Link to version before this change [5ba9d31](https://github.com/danilw/nanovg_vulkan/tree/5ba9d31165cebfb06abb9929ee9aa69a0abe86b1), this change [10d5211](https://github.com/danilw/nanovg_vulkan/commit/10d5211ac678f615a58462c270dff9eb7ffe4872).*
 ___
 
 <!---
@@ -115,8 +130,8 @@ ___
 In this PR:
 1. Merge latest nanovg
 
-2. Fix Stencil Strokes: 
-I added a new enum to handle the 3 different pipelines used for stencil strokes.  
+2. Fix Stencil Strokes:
+I added a new enum to handle the 3 different pipelines used for stencil strokes.
 I wanted to also use enums for the fill-path (nvgFill) to make the code cleaner, but haven't done that yet.
 
 3. I combined the 2 CMakeLists.txt into example/CMakeLists.txt and added some bits to make it easier to build and debug in MSVC/VSCode.
@@ -130,7 +145,7 @@ ___
 
 ### 2021 update - fixed all errors, this code has no Validation errors and work correctly everywhere.
 
-Thanks to [**@fzwoch**](https://github.com/fzwoch) [commits](https://github.com/danilw/nanovg_vulkan/pull/1) **by default used `TOPOLOGY_TRIANGLE_LIST`**, because `TOPOLOGY_TRIANGLE_FAN` is optional in Vulkan. 
+Thanks to [**@fzwoch**](https://github.com/fzwoch) [commits](https://github.com/danilw/nanovg_vulkan/pull/1) **by default used `TOPOLOGY_TRIANGLE_LIST`**, because `TOPOLOGY_TRIANGLE_FAN` is optional in Vulkan.
 
 To enable *TOPOLOGY_TRIANGLE_FAN* edit `src/nanovg_vk.h` and set there `#define USE_TOPOLOGY_TRIANGLE_FAN`
 
