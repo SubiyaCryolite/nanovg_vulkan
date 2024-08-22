@@ -32,8 +32,6 @@ extern "C" {
 NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue);
 void nvgDeleteVk(NVGcontext *ctx);
 
-static void vknvg_setDynamicState(VkCommandBuffer cmdBuffer,
-                                  VKNVGCreatePipelineKey keypipelineKey);
 #ifdef __cplusplus
 }
 #endif
@@ -147,6 +145,26 @@ typedef struct VKNVGCreatePipelineKey {
   NVGcompositeOperationState compositOperation;
 } VKNVGCreatePipelineKey;
 
+/**
+ * VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK = 6,
+ * VK_DYNAMIC_STATE_STENCIL_WRITE_MASK = 7,
+ * VK_DYNAMIC_STATE_STENCIL_REFERENCE = 8,
+ */
+typedef struct VkNvgDynamicState {
+  bool primitiveTopology; //
+} VkNvgDynamicState;
+
+static VkNvgDynamicState vkNvgDynamicState = {0};
+
+static void vknvg_setDynamicState(VkCommandBuffer cmd,
+                                  VKNVGCreatePipelineKey *pipelinekey) {
+  // set defaults before changing state in calls
+  if (vkNvgDynamicState.primitiveTopology) {
+    // top level topology is always triangle
+    vkCmdSetPrimitiveTopology(cmd, pipelinekey->topology);
+  }
+}
+
 typedef struct VKNVGPipeline {
   VKNVGCreatePipelineKey create_key;
   VkPipeline pipeline;
@@ -211,19 +229,6 @@ typedef struct VKNVGcontext {
   VkShaderModule fillVertShader;
   VkQueue queue;
 } VKNVGcontext;
-
-/**
- * VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK = 6,
- * VK_DYNAMIC_STATE_STENCIL_WRITE_MASK = 7,
- * VK_DYNAMIC_STATE_STENCIL_REFERENCE = 8,
- */
-typedef struct VkNvgDynamicState {
-  bool stencilCompareMask;
-  bool stencilWriteMask;
-  bool stencilReference;
-} VkNvgDynamicState;
-
-static VkNvgDynamicState vkNvgDynamicState = {0};
 
 static int vknvg_maxi(int a, int b) { return a > b ? a : b; }
 
@@ -335,7 +340,7 @@ static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
 }
 static int vknvg_compareCreatePipelineKey(const VKNVGCreatePipelineKey *a,
                                           const VKNVGCreatePipelineKey *b) {
-  if (a->topology != b->topology) {
+  if (!vkNvgDynamicState.primitiveTopology && a->topology != b->topology) {
     return a->topology - b->topology;
   }
 
@@ -851,13 +856,23 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   vp.viewportCount = 1;
   vp.scissorCount = 1;
 
-#define NUM_DYNAMIC_STATES 2
-  VkDynamicState dynamicStateEnables[NUM_DYNAMIC_STATES] = {
-      VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  uint32_t NUM_DYNAMIC_STATES = 2;
+  if (vkNvgDynamicState.primitiveTopology)
+    NUM_DYNAMIC_STATES++;
+
+  VkDynamicState *dynamicStateEnables =
+      calloc(NUM_DYNAMIC_STATES, sizeof(VkDynamicState));
+  dynamicStateEnables[0] = VK_DYNAMIC_STATE_VIEWPORT;
+  dynamicStateEnables[1] = VK_DYNAMIC_STATE_SCISSOR;
+  uint32_t i = 1;
+  if (vkNvgDynamicState.primitiveTopology) {
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+  }
 
   VkPipelineDynamicStateCreateInfo dynamicState = {
       VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-  dynamicState.dynamicStateCount = 2;
+  dynamicState.dynamicStateCount = NUM_DYNAMIC_STATES;
   dynamicState.pDynamicStates = dynamicStateEnables;
 
   VkPipelineDepthStencilStateCreateInfo ds =
@@ -900,6 +915,8 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   VkPipeline pipeline;
   NVGVK_CHECK_RESULT(vkCreateGraphicsPipelines(
       device, 0, 1, &pipelineCreateInfo, allocator, &pipeline));
+
+  free((void *)dynamicStateEnables);
 
   VKNVGPipeline *ret = vknvg_allocPipeline(vk);
 
@@ -1198,7 +1215,7 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
     const VkDeviceSize offsets[1] = {paths[i].fillOffset * sizeof(NVGvertex)};
     vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                            &vk->vertexBuffer[currentFrame].buffer, offsets);
-    vknvg_setDynamicState(cmdBuffer, pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, 0, 0);
   }
 
@@ -1222,7 +1239,7 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
                                        sizeof(NVGvertex)};
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, pipelinekey);
+      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   }
@@ -1237,7 +1254,7 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
   const VkDeviceSize offsets[1] = {call->triangleOffset * sizeof(NVGvertex)};
   vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                          &vk->vertexBuffer[currentFrame].buffer, offsets);
-  vknvg_setDynamicState(cmdBuffer, pipelinekey);
+  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vkCmdDraw(cmdBuffer, call->triangleCount, 1, 0, 0);
 }
 
@@ -1275,7 +1292,7 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call,
     const VkDeviceSize offsets[1] = {paths[i].fillOffset * sizeof(NVGvertex)};
     vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                            &vk->vertexBuffer[currentFrame].buffer, offsets);
-    vknvg_setDynamicState(cmdBuffer, pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, 0, 0);
   }
   if (vk->flags & NVG_ANTIALIAS) {
@@ -1288,7 +1305,7 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call,
                                        sizeof(NVGvertex)};
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, pipelinekey);
+      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   }
@@ -1333,7 +1350,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, pipelinekey);
+      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
 
@@ -1348,7 +1365,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, pipelinekey);
+      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
 
@@ -1363,7 +1380,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, pipelinekey);
+      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   } else {
@@ -1392,7 +1409,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, pipelinekey);
+      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   }
@@ -1428,21 +1445,8 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call,
   vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                          &vk->vertexBuffer[currentFrame].buffer, offsets);
 
-  vknvg_setDynamicState(cmdBuffer, pipelinekey);
+  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vkCmdDraw(cmdBuffer, call->triangleCount, 1, 0, 0);
-}
-
-static void vknvg_setDynamicState(VkCommandBuffer cmdBuffer,
-                                  VKNVGCreatePipelineKey *pipelineKey) {
-  // set defaults before changing state in calls
-  if (pipelineKey->stencilStroke) {
-    if (vkNvgDynamicState.stencilCompareMask) {
-    }
-    if (vkNvgDynamicState.stencilCompareMask) {
-    }
-    if (vkNvgDynamicState.stencilCompareMask) {
-    }
-  }
 }
 
 ///==================================================================================================================
@@ -1481,6 +1485,13 @@ static int vknvg_renderCreate(void *uptr) {
   vk->descLayout = vknvg_createDescriptorSetLayout(device, allocator);
   vk->pipelineLayout =
       vknvg_createPipelineLayout(device, vk->descLayout, allocator);
+
+  VkPhysicalDeviceFeatures supportedFeatures;
+  vkGetPhysicalDeviceFeatures(vk->createInfo.gpu, &supportedFeatures);
+
+  // TODO start here and see
+  vkNvgDynamicState.primitiveTopology = false;
+
   return 1;
 }
 
