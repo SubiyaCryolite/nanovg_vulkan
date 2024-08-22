@@ -157,11 +157,10 @@ typedef struct VkNvgDynamicState {
 static VkNvgDynamicState vkNvgDynamicState = {0};
 
 static void vknvg_setDynamicState(VkCommandBuffer cmd,
-                                  VKNVGCreatePipelineKey *pipelinekey) {
+                                  const VKNVGCreatePipelineKey *pipeline_key) {
   // set defaults before changing state in calls
   if (vkNvgDynamicState.primitiveTopology) {
-    // top level topology is always triangle
-    vkCmdSetPrimitiveTopology(cmd, pipelinekey->topology);
+    vkCmdSetPrimitiveTopology(cmd, pipeline_key->topology);
   }
 }
 
@@ -1204,7 +1203,7 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
   pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-
+  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                     call->uniformOffset, call->image);
   vkCmdBindDescriptorSets(
@@ -1215,7 +1214,6 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
     const VkDeviceSize offsets[1] = {paths[i].fillOffset * sizeof(NVGvertex)};
     vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                            &vk->vertexBuffer[currentFrame].buffer, offsets);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, 0, 0);
   }
 
@@ -1233,13 +1231,13 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
     pipelinekey.stencilTest = true;
     pipelinekey.edgeAA = true;
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     // Draw fringes
     for (int i = 0; i < npaths; ++i) {
       const VkDeviceSize offsets[1] = {paths[i].strokeOffset *
                                        sizeof(NVGvertex)};
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   }
@@ -1250,11 +1248,10 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
   pipelinekey.stencilTest = true;
   pipelinekey.edgeAA = false;
   vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-
+  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   const VkDeviceSize offsets[1] = {call->triangleOffset * sizeof(NVGvertex)};
   vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                          &vk->vertexBuffer[currentFrame].buffer, offsets);
-  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vkCmdDraw(cmdBuffer, call->triangleCount, 1, 0, 0);
 }
 
@@ -1281,7 +1278,7 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call,
   pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-
+  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                     call->uniformOffset, call->image);
   vkCmdBindDescriptorSets(
@@ -1292,20 +1289,18 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call,
     const VkDeviceSize offsets[1] = {paths[i].fillOffset * sizeof(NVGvertex)};
     vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                            &vk->vertexBuffer[currentFrame].buffer, offsets);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, 0, 0);
   }
   if (vk->flags & NVG_ANTIALIAS) {
     pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     // Draw fringes
     for (int i = 0; i < npaths; ++i) {
       const VkDeviceSize offsets[1] = {paths[i].strokeOffset *
                                        sizeof(NVGvertex)};
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   }
@@ -1341,6 +1336,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
     pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_FILL;
 
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdBindDescriptorSets(
         cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1,
         &vk->uniformDescriptorSet2[descriptor_offset], 0, nullptr);
@@ -1350,13 +1346,13 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
 
     // //Draw AA shape if stencil EQUAL passes
     pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_DRAW_AA;
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdBindDescriptorSets(
         cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1,
         &vk->uniformDescriptorSet1[descriptor_offset], 0, nullptr);
@@ -1365,13 +1361,13 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
 
     // Fill stencil with 0, always
     pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_CLEAR;
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vkCmdBindDescriptorSets(
         cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1,
         &vk->uniformDescriptorSet1[descriptor_offset], 0, nullptr);
@@ -1380,7 +1376,6 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   } else {
@@ -1397,6 +1392,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
     pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
+    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
     vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                       call->uniformOffset, call->image);
     vkCmdBindDescriptorSets(
@@ -1409,7 +1405,6 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
       offsets[0] = paths[i].strokeOffset * sizeof(NVGvertex);
       vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                              &vk->vertexBuffer[currentFrame].buffer, offsets);
-      vknvg_setDynamicState(cmdBuffer, &pipelinekey);
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, 0, 0);
     }
   }
@@ -1435,6 +1430,7 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call,
   pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
+  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                     call->uniformOffset, call->image);
   vkCmdBindDescriptorSets(
@@ -1444,8 +1440,6 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call,
   const VkDeviceSize offsets[1] = {call->triangleOffset * sizeof(NVGvertex)};
   vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                          &vk->vertexBuffer[currentFrame].buffer, offsets);
-
-  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
   vkCmdDraw(cmdBuffer, call->triangleCount, 1, 0, 0);
 }
 
@@ -1490,7 +1484,7 @@ static int vknvg_renderCreate(void *uptr) {
   vkGetPhysicalDeviceFeatures(vk->createInfo.gpu, &supportedFeatures);
 
   // TODO start here and see
-  vkNvgDynamicState.primitiveTopology = false;
+  vkNvgDynamicState.primitiveTopology = true;
 
   return 1;
 }
