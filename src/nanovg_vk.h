@@ -856,7 +856,7 @@ static void vknvg_InitTexture(VkCommandBuffer cmdbuffer, VkQueue queue, VKNVGtex
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
     vkBeginCommandBuffer( cmdbuffer, &beginInfo );
-    
+
 #ifdef __cplusplus
     VkImageMemoryBarrier layoutTransitionBarrier = {};
 #else
@@ -873,12 +873,12 @@ static void vknvg_InitTexture(VkCommandBuffer cmdbuffer, VkQueue queue, VKNVGtex
     VkImageSubresourceRange resourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     layoutTransitionBarrier.subresourceRange = resourceRange;
 
-    vkCmdPipelineBarrier(   cmdbuffer, 
-                            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
-                            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
+    vkCmdPipelineBarrier(   cmdbuffer,
+                            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                             0,
                             0, NULL,
-                            0, NULL, 
+                            0, NULL,
                             1, &layoutTransitionBarrier );
 
     vkEndCommandBuffer( cmdbuffer );
@@ -1035,7 +1035,7 @@ static void vknvg_setUniforms(VKNVGcontext *vk, VkDescriptorSet descSet, int uni
   writes[1].dstBinding = 1;
 
   VkDescriptorImageInfo image_info;
-  
+
   VKNVGtexture *tex = NULL;
   if (image != 0) {
     tex = vknvg_findTexture(vk, image);
@@ -1127,7 +1127,7 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call, uint32_t descrip
   VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
   VkCommandBuffer cmdBuffer = vk->createInfo.cmdBuffer[currentFrame];
-  
+
 #ifdef __cplusplus
   VKNVGCreatePipelineKey pipelinekey = {};
 #else
@@ -1186,9 +1186,9 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_
     pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 
     pipelinekey.edgeAAShader = false;
-    pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;    
-    
-    // Fill stencil with 1 if stencil EQUAL passes 
+    pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
+
+    // Fill stencil with 1 if stencil EQUAL passes
     pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_FILL;
 
     vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
