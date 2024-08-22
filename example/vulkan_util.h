@@ -134,7 +134,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   app_info.applicationVersion = 1;
   app_info.pEngineName = "NanoVG";
   app_info.engineVersion = 1;
-  app_info.apiVersion = VK_API_VERSION_1_0;
+  app_info.apiVersion = VK_API_VERSION_1_3;
 
   static const char *append_extensions[] = {
       VK_EXT_DEBUG_UTILS_EXTENSION_NAME,

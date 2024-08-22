@@ -264,7 +264,7 @@ int main() {
 
       if ((queue_family_properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) && supports_present)
       {
-        
+
         VkPhysicalDeviceProperties pr;
         vkGetPhysicalDeviceProperties(gpu[i], &pr);
         idx = i;
