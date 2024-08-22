@@ -143,26 +143,19 @@ typedef struct VKNVGCreatePipelineKey {
   bool edgeAAShader;
   VkPrimitiveTopology topology;
   NVGcompositeOperationState compositOperation;
+  VkColorComponentFlags colorWriteMask;
 } VKNVGCreatePipelineKey;
 
-/**
- * VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK = 6,
- * VK_DYNAMIC_STATE_STENCIL_WRITE_MASK = 7,
- * VK_DYNAMIC_STATE_STENCIL_REFERENCE = 8,
- */
 typedef struct VkNvgDynamicState {
-  bool primitiveTopology; //
+  bool stencils;
+  bool primitiveTopology;
+  bool compositOperation;
 } VkNvgDynamicState;
 
 static VkNvgDynamicState vkNvgDynamicState = {0};
 
 static void vknvg_setDynamicState(VkCommandBuffer cmd,
-                                  const VKNVGCreatePipelineKey *pipeline_key) {
-  // set defaults before changing state in calls
-  if (vkNvgDynamicState.primitiveTopology) {
-    vkCmdSetPrimitiveTopology(cmd, pipeline_key->topology);
-  }
-}
+                                  const VKNVGCreatePipelineKey *pipelineKey);
 
 typedef struct VKNVGPipeline {
   VKNVGCreatePipelineKey create_key;
@@ -343,14 +336,17 @@ static int vknvg_compareCreatePipelineKey(const VKNVGCreatePipelineKey *a,
     return a->topology - b->topology;
   }
 
+  if (!vkNvgDynamicState.stencils) {
+    if (a->stencilTest != b->stencilTest) {
+      return a->stencilTest - b->stencilTest;
+    }
+  }
+
   if (a->stencilFill != b->stencilFill) {
     return a->stencilFill - b->stencilFill;
   }
   if (a->stencilStroke != b->stencilStroke) {
     return a->stencilStroke - b->stencilStroke;
-  }
-  if (a->stencilTest != b->stencilTest) {
-    return a->stencilTest - b->stencilTest;
   }
 
   if (a->edgeAA != b->edgeAA) {
@@ -360,17 +356,19 @@ static int vknvg_compareCreatePipelineKey(const VKNVGCreatePipelineKey *a,
     return a->edgeAAShader - b->edgeAAShader;
   }
 
-  if (a->compositOperation.srcRGB != b->compositOperation.srcRGB) {
-    return a->compositOperation.srcRGB - b->compositOperation.srcRGB;
-  }
-  if (a->compositOperation.srcAlpha != b->compositOperation.srcAlpha) {
-    return a->compositOperation.srcAlpha - b->compositOperation.srcAlpha;
-  }
-  if (a->compositOperation.dstRGB != b->compositOperation.dstRGB) {
-    return a->compositOperation.dstRGB - b->compositOperation.dstRGB;
-  }
-  if (a->compositOperation.dstAlpha != b->compositOperation.dstAlpha) {
-    return a->compositOperation.dstAlpha - b->compositOperation.dstAlpha;
+  if (!vkNvgDynamicState.compositOperation) {
+    if (a->compositOperation.srcRGB != b->compositOperation.srcRGB) {
+      return a->compositOperation.srcRGB - b->compositOperation.srcRGB;
+    }
+    if (a->compositOperation.srcAlpha != b->compositOperation.srcAlpha) {
+      return a->compositOperation.srcAlpha - b->compositOperation.srcAlpha;
+    }
+    if (a->compositOperation.dstRGB != b->compositOperation.dstRGB) {
+      return a->compositOperation.dstRGB - b->compositOperation.dstRGB;
+    }
+    if (a->compositOperation.dstAlpha != b->compositOperation.dstAlpha) {
+      return a->compositOperation.dstAlpha - b->compositOperation.dstAlpha;
+    }
   }
   return 0;
 }
@@ -578,9 +576,21 @@ vknvg_NVGblendFactorToVkBlendFactor(enum NVGblendFactor factor) {
   }
 }
 
+static VkFlags
+vknvg_colorWriteMask(const VKNVGCreatePipelineKey *pipeline_key) {
+  if (pipeline_key->stencilStroke == VKNVG_STENCIL_STROKE_CLEAR) {
+    return 0;
+  }
+
+  if (pipeline_key->stencilFill) {
+    return 0;
+  }
+  return 0xf;
+}
+
 static VkPipelineColorBlendAttachmentState
 vknvg_compositOperationToColorBlendAttachmentState(
-    NVGcompositeOperationState compositeOperation) {
+    const VKNVGCreatePipelineKey *pipelineKey) {
 #ifdef __cplusplus
   VkPipelineColorBlendAttachmentState state = {};
 #else
@@ -589,16 +599,16 @@ vknvg_compositOperationToColorBlendAttachmentState(
   state.blendEnable = VK_TRUE;
   state.colorBlendOp = VK_BLEND_OP_ADD;
   state.alphaBlendOp = VK_BLEND_OP_ADD;
-  state.colorWriteMask = 0xf;
+  state.colorWriteMask = vknvg_colorWriteMask(pipelineKey);
 
   state.srcColorBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-      (enum NVGblendFactor)compositeOperation.srcRGB);
+      pipelineKey->compositOperation.srcRGB);
   state.srcAlphaBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-      (enum NVGblendFactor)compositeOperation.srcAlpha);
+      pipelineKey->compositOperation.srcAlpha);
   state.dstColorBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-      (enum NVGblendFactor)compositeOperation.dstRGB);
+      pipelineKey->compositOperation.dstRGB);
   state.dstAlphaBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-      (enum NVGblendFactor)compositeOperation.dstAlpha);
+      pipelineKey->compositOperation.dstAlpha);
 
   if (state.srcColorBlendFactor == VK_BLEND_FACTOR_MAX_ENUM ||
       state.srcAlphaBlendFactor == VK_BLEND_FACTOR_MAX_ENUM ||
@@ -610,7 +620,6 @@ vknvg_compositOperationToColorBlendAttachmentState(
     state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
     state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
   }
-
   return state;
 }
 
@@ -688,16 +697,16 @@ vknvg_createPipelineLayout(VkDevice device, VkDescriptorSetLayout descLayout,
 }
 
 static VkPipelineDepthStencilStateCreateInfo
-initializeDepthStencilCreateInfo(VKNVGCreatePipelineKey *pipelinekey) {
+initializeDepthStencilCreateInfo(const VKNVGCreatePipelineKey *pipelinekey) {
 
   VkPipelineDepthStencilStateCreateInfo ds = {
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-  if (pipelinekey->stencilStroke) {
-    ds.depthWriteEnable = VK_FALSE;
-    ds.depthTestEnable = VK_TRUE;
-    ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    ds.depthBoundsTestEnable = VK_FALSE;
+  ds.depthWriteEnable = VK_FALSE;
+  ds.depthTestEnable = VK_TRUE;
+  ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+  ds.depthBoundsTestEnable = VK_FALSE;
 
+  if (pipelinekey->stencilStroke) { // enables
     ds.stencilTestEnable = VK_TRUE;
     ds.front.failOp = VK_STENCIL_OP_KEEP;
     ds.front.depthFailOp = VK_STENCIL_OP_KEEP;
@@ -729,10 +738,6 @@ initializeDepthStencilCreateInfo(VKNVGCreatePipelineKey *pipelinekey) {
     return ds;
   }
 
-  ds.depthWriteEnable = VK_FALSE;
-  ds.depthTestEnable = VK_TRUE;
-  ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  ds.depthBoundsTestEnable = VK_FALSE;
   ds.stencilTestEnable = VK_FALSE;
   ds.back.failOp = VK_STENCIL_OP_KEEP;
   ds.back.passOp = VK_STENCIL_OP_KEEP;
@@ -774,6 +779,14 @@ initializeDepthStencilCreateInfo(VKNVGCreatePipelineKey *pipelinekey) {
 
   return ds;
 }
+
+static VkFlags vknvg_cullMode(VKNVGCreatePipelineKey *pipelinekey) {
+  if (pipelinekey->stencilFill) {
+    return VK_CULL_MODE_NONE;
+  }
+  return VK_CULL_MODE_BACK_BIT;
+}
+
 static VKNVGPipeline *
 vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
 
@@ -825,7 +838,7 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   VkPipelineRasterizationStateCreateInfo rs = {
       VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
   rs.polygonMode = VK_POLYGON_MODE_FILL;
-  rs.cullMode = VK_CULL_MODE_BACK_BIT;
+  rs.cullMode = vknvg_cullMode(pipelinekey);
   rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rs.depthClampEnable = VK_FALSE;
   rs.rasterizerDiscardEnable = VK_FALSE;
@@ -833,17 +846,8 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   rs.lineWidth = 1.0f;
 
   VkPipelineColorBlendAttachmentState colorblend =
-      vknvg_compositOperationToColorBlendAttachmentState(
-          pipelinekey->compositOperation);
-
-  if (pipelinekey->stencilStroke == VKNVG_STENCIL_STROKE_CLEAR) {
-    colorblend.colorWriteMask = 0;
-  }
-
-  if (pipelinekey->stencilFill) {
-    rs.cullMode = VK_CULL_MODE_NONE;
-    colorblend.colorWriteMask = 0;
-  }
+      vknvg_compositOperationToColorBlendAttachmentState(pipelinekey);
+  pipelinekey->colorWriteMask = vknvg_colorWriteMask(pipelinekey);
 
   VkPipelineColorBlendStateCreateInfo cb = {
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
@@ -858,15 +862,25 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   uint32_t NUM_DYNAMIC_STATES = 2;
   if (vkNvgDynamicState.primitiveTopology)
     NUM_DYNAMIC_STATES++;
+  if (vkNvgDynamicState.compositOperation)
+    NUM_DYNAMIC_STATES++;
+  if (vkNvgDynamicState.stencils)
+    NUM_DYNAMIC_STATES += 2;
 
+  uint32_t i = 0;
   VkDynamicState *dynamicStateEnables =
       calloc(NUM_DYNAMIC_STATES, sizeof(VkDynamicState));
-  dynamicStateEnables[0] = VK_DYNAMIC_STATE_VIEWPORT;
-  dynamicStateEnables[1] = VK_DYNAMIC_STATE_SCISSOR;
-  uint32_t i = 1;
+  dynamicStateEnables[i] = VK_DYNAMIC_STATE_VIEWPORT;
+  dynamicStateEnables[i++] = VK_DYNAMIC_STATE_SCISSOR;
   if (vkNvgDynamicState.primitiveTopology) {
-    i++;
-    dynamicStateEnables[i] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+  }
+  if (vkNvgDynamicState.compositOperation) {
+    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
+  }
+  if (vkNvgDynamicState.stencils) {
+    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
+    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_STENCIL_OP;
   }
 
   VkPipelineDynamicStateCreateInfo dynamicState = {
@@ -915,7 +929,7 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   NVGVK_CHECK_RESULT(vkCreateGraphicsPipelines(
       device, 0, 1, &pipelineCreateInfo, allocator, &pipeline));
 
-  free((void *)dynamicStateEnables);
+  free(dynamicStateEnables);
 
   VKNVGPipeline *ret = vknvg_allocPipeline(vk);
 
@@ -1189,21 +1203,21 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
   VkCommandBuffer cmdBuffer = vk->createInfo.cmdBuffer[currentFrame];
 
 #ifdef __cplusplus
-  VKNVGCreatePipelineKey pipelinekey = {};
+  VKNVGCreatePipelineKey pipelineKey = {};
 #else
-  VKNVGCreatePipelineKey pipelinekey = {0};
+  VKNVGCreatePipelineKey pipelineKey = {0};
 #endif
-  pipelinekey.compositOperation = call->compositOperation;
+  pipelineKey.compositOperation = call->compositOperation;
 #ifndef USE_TOPOLOGY_TRIANGLE_FAN
-  pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 #else
-  pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+  pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 #endif
-  pipelinekey.stencilFill = true;
-  pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
+  pipelineKey.stencilFill = true;
+  pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
-  vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+  vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+  vknvg_setDynamicState(cmdBuffer, &pipelineKey);
   vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                     call->uniformOffset, call->image);
   vkCmdBindDescriptorSets(
@@ -1225,13 +1239,13 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
 
   if (vk->flags & NVG_ANTIALIAS) {
 
-    pipelinekey.compositOperation = call->compositOperation;
-    pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    pipelinekey.stencilFill = false;
-    pipelinekey.stencilTest = true;
-    pipelinekey.edgeAA = true;
-    vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+    pipelineKey.compositOperation = call->compositOperation;
+    pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    pipelineKey.stencilFill = false;
+    pipelineKey.stencilTest = true;
+    pipelineKey.edgeAA = true;
+    vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+    vknvg_setDynamicState(cmdBuffer, &pipelineKey);
     // Draw fringes
     for (int i = 0; i < npaths; ++i) {
       const VkDeviceSize offsets[1] = {paths[i].strokeOffset *
@@ -1242,13 +1256,13 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call,
     }
   }
 
-  pipelinekey.compositOperation = call->compositOperation;
-  pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-  pipelinekey.stencilFill = false;
-  pipelinekey.stencilTest = true;
-  pipelinekey.edgeAA = false;
-  vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+  pipelineKey.compositOperation = call->compositOperation;
+  pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+  pipelineKey.stencilFill = false;
+  pipelineKey.stencilTest = true;
+  pipelineKey.edgeAA = false;
+  vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+  vknvg_setDynamicState(cmdBuffer, &pipelineKey);
   const VkDeviceSize offsets[1] = {call->triangleOffset * sizeof(NVGvertex)};
   vkCmdBindVertexBuffers(cmdBuffer, 0, 1,
                          &vk->vertexBuffer[currentFrame].buffer, offsets);
@@ -1265,20 +1279,20 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call,
   VkCommandBuffer cmdBuffer = vk->createInfo.cmdBuffer[currentFrame];
 
 #ifdef __cplusplus
-  VKNVGCreatePipelineKey pipelinekey = {};
+  VKNVGCreatePipelineKey pipelineKey = {};
 #else
-  VKNVGCreatePipelineKey pipelinekey = {0};
+  VKNVGCreatePipelineKey pipelineKey = {0};
 #endif
-  pipelinekey.compositOperation = call->compositOperation;
+  pipelineKey.compositOperation = call->compositOperation;
 #ifndef USE_TOPOLOGY_TRIANGLE_FAN
-  pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 #else
-  pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+  pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 #endif
-  pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
+  pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
-  vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+  vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+  vknvg_setDynamicState(cmdBuffer, &pipelineKey);
   vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                     call->uniformOffset, call->image);
   vkCmdBindDescriptorSets(
@@ -1292,9 +1306,9 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call,
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, 0, 0);
   }
   if (vk->flags & NVG_ANTIALIAS) {
-    pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+    pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+    vknvg_setDynamicState(cmdBuffer, &pipelineKey);
     // Draw fringes
     for (int i = 0; i < npaths; ++i) {
       const VkDeviceSize offsets[1] = {paths[i].strokeOffset *
@@ -1322,21 +1336,21 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
                       call->uniformOffset + vk->fragSize, call->image);
 
 #ifdef __cplusplus
-    VKNVGCreatePipelineKey pipelinekey = {};
+    VKNVGCreatePipelineKey pipelineKey = {};
 #else
-    VKNVGCreatePipelineKey pipelinekey = {0};
+    VKNVGCreatePipelineKey pipelineKey = {0};
 #endif
-    pipelinekey.compositOperation = call->compositOperation;
-    pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    pipelineKey.compositOperation = call->compositOperation;
+    pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 
-    pipelinekey.edgeAAShader = false;
-    pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
+    pipelineKey.edgeAAShader = false;
+    pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
     // Fill stencil with 1 if stencil EQUAL passes
-    pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_FILL;
+    pipelineKey.stencilStroke = VKNVG_STENCIL_STROKE_FILL;
 
-    vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+    vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+    vknvg_setDynamicState(cmdBuffer, &pipelineKey);
     vkCmdBindDescriptorSets(
         cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1,
         &vk->uniformDescriptorSet2[descriptor_offset], 0, nullptr);
@@ -1350,9 +1364,9 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
     }
 
     // //Draw AA shape if stencil EQUAL passes
-    pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_DRAW_AA;
-    vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+    pipelineKey.stencilStroke = VKNVG_STENCIL_STROKE_DRAW_AA;
+    vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+    vknvg_setDynamicState(cmdBuffer, &pipelineKey);
     vkCmdBindDescriptorSets(
         cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1,
         &vk->uniformDescriptorSet1[descriptor_offset], 0, nullptr);
@@ -1365,9 +1379,9 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
     }
 
     // Fill stencil with 0, always
-    pipelinekey.stencilStroke = VKNVG_STENCIL_STROKE_CLEAR;
-    vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+    pipelineKey.stencilStroke = VKNVG_STENCIL_STROKE_CLEAR;
+    vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+    vknvg_setDynamicState(cmdBuffer, &pipelineKey);
     vkCmdBindDescriptorSets(
         cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1,
         &vk->uniformDescriptorSet1[descriptor_offset], 0, nullptr);
@@ -1381,18 +1395,18 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call,
   } else {
 
 #ifdef __cplusplus
-    VKNVGCreatePipelineKey pipelinekey = {};
+    VKNVGCreatePipelineKey pipelineKey = {};
 #else
-    VKNVGCreatePipelineKey pipelinekey = {0};
+    VKNVGCreatePipelineKey pipelineKey = {0};
 #endif
 
-    pipelinekey.compositOperation = call->compositOperation;
-    pipelinekey.stencilFill = false;
-    pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
+    pipelineKey.compositOperation = call->compositOperation;
+    pipelineKey.stencilFill = false;
+    pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
-    vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-    vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+    vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+    vknvg_setDynamicState(cmdBuffer, &pipelineKey);
     vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                       call->uniformOffset, call->image);
     vkCmdBindDescriptorSets(
@@ -1420,17 +1434,17 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call,
   VkCommandBuffer cmdBuffer = vk->createInfo.cmdBuffer[currentFrame];
 
 #ifdef __cplusplus
-  VKNVGCreatePipelineKey pipelinekey = {};
+  VKNVGCreatePipelineKey pipelineKey = {};
 #else
-  VKNVGCreatePipelineKey pipelinekey = {0};
+  VKNVGCreatePipelineKey pipelineKey = {0};
 #endif
-  pipelinekey.compositOperation = call->compositOperation;
-  pipelinekey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelinekey.stencilFill = false;
-  pipelinekey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
+  pipelineKey.compositOperation = call->compositOperation;
+  pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineKey.stencilFill = false;
+  pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
-  vknvg_bindPipeline(vk, cmdBuffer, &pipelinekey);
-  vknvg_setDynamicState(cmdBuffer, &pipelinekey);
+  vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
+  vknvg_setDynamicState(cmdBuffer, &pipelineKey);
   vknvg_setUniforms(vk, vk->uniformDescriptorSet1[descriptor_offset],
                     call->uniformOffset, call->image);
   vkCmdBindDescriptorSets(
@@ -1483,8 +1497,10 @@ static int vknvg_renderCreate(void *uptr) {
   VkPhysicalDeviceFeatures supportedFeatures;
   vkGetPhysicalDeviceFeatures(vk->createInfo.gpu, &supportedFeatures);
 
-  // TODO start here and see
-  vkNvgDynamicState.primitiveTopology = true;
+  if (vkCmdSetPrimitiveTopology)
+    vkNvgDynamicState.primitiveTopology = true;
+  if (vkCmdSetStencilTestEnable)
+    vkNvgDynamicState.stencils = true;
 
   return 1;
 }
@@ -2068,6 +2084,49 @@ error:
   return nullptr;
 }
 void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
+
+static void vknvg_setDynamicState(VkCommandBuffer cmd,
+                                  const VKNVGCreatePipelineKey *pipelineKey) {
+  // set defaults before changing state in calls
+  if (vkNvgDynamicState.primitiveTopology) {
+    vkCmdSetPrimitiveTopology(cmd, pipelineKey->topology);
+  }
+  if (vkNvgDynamicState.compositOperation) {
+    VkPipelineColorBlendAttachmentState colorBlendAttachment =
+        vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
+#ifdef __cplusplus
+    VkColorBlendEquationEXT colorBlendEquation = {};
+#else
+    VkColorBlendEquationEXT colorBlendEquation = {0};
+#endif
+    colorBlendEquation.srcColorBlendFactor =
+        colorBlendAttachment.srcColorBlendFactor;
+    colorBlendEquation.dstColorBlendFactor =
+        colorBlendAttachment.dstColorBlendFactor;
+    colorBlendEquation.colorBlendOp = colorBlendAttachment.colorBlendOp;
+    colorBlendEquation.srcAlphaBlendFactor =
+        colorBlendAttachment.srcAlphaBlendFactor;
+    colorBlendEquation.dstAlphaBlendFactor =
+        colorBlendAttachment.dstAlphaBlendFactor;
+    colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
+    // vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &colorBlendEquation);
+  }
+  if (vkNvgDynamicState.stencils) {
+    VkPipelineDepthStencilStateCreateInfo ds =
+        initializeDepthStencilCreateInfo(pipelineKey);
+
+    // VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE
+    vkCmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
+    if (ds.stencilTestEnable) {
+      // VK_DYNAMIC_STATE_STENCIL_OP
+      vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, ds.front.failOp,
+                        ds.front.passOp, ds.front.depthFailOp,
+                        ds.front.compareOp);
+      vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, ds.back.failOp,
+                        ds.back.passOp, ds.back.depthFailOp, ds.back.compareOp);
+    }
+  }
+}
 
 #if !defined(__cplusplus) || defined(NANOVG_VK_NO_nullptrPTR)
 #undef nullptr

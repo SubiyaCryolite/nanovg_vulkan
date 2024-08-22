@@ -555,7 +555,7 @@ VkResult vk_init_ext(VkInstance *vk, const char *ext_names[], uint32_t ext_count
             .applicationVersion = 0x010000,
             .pEngineName = "Nanovg demo",
             .engineVersion = 0x010000,
-            .apiVersion = VK_API_VERSION_1_3,
+            .apiVersion = VK_API_VERSION_1_0,
     };
     VkInstanceCreateInfo info;
 
