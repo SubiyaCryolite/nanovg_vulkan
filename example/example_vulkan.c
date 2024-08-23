@@ -284,7 +284,11 @@ int main() {
 
   printf("Using GPU device %lu\n", (unsigned long) idx);
 
-  VulkanDevice *device = createVulkanDevice(gpu[idx]);
+  NvgDynamicState dynamicState = {0};
+  dynamicState.dynamicState1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+  dynamicState.dynamicState2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+  dynamicState.dynamicState3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
+  VulkanDevice *device = createVulkanDevice(gpu[idx], &dynamicState);
 
   int winWidth, winHeight;
   glfwGetWindowSize(window, &winWidth, &winHeight);
@@ -294,6 +298,7 @@ int main() {
   FrameBuffers fb = createFrameBuffers(device, surface, queue, winWidth, winHeight, 0);
 
   VkCommandBuffer *cmd_buffer = createCmdBuffer(device->device, device->commandPool, fb.swapchain_image_count);
+
   VKNVGCreateInfo create_info = {0};
   create_info.device = device->device;
   create_info.gpu = device->gpu;
@@ -301,6 +306,9 @@ int main() {
   create_info.cmdBuffer = cmd_buffer;
   create_info.swapchainImageCount = fb.swapchain_image_count;
   create_info.currentFrame = &fb.current_frame;
+  create_info.dynamicState1 = dynamicState.dynamicState1;
+  create_info.dynamicState2 = dynamicState.dynamicState2;
+  create_info.dynamicState3 = dynamicState.dynamicState3;
 
   int flags = 0;
 #ifndef NDEBUG
