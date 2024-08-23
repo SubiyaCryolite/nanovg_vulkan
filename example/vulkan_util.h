@@ -74,11 +74,17 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, NvgDynamicState *dynamicS
     dynamicState->dynamicState2.pNext = &dynamicState->dynamicState3;
   }
 
-  uint32_t i=0;
+  uint32_t i = 0;
   const char *deviceExtensions[enabledExtensionCount];
   deviceExtensions[i]= VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-  if(dynamicState->dynamicState1.extendedDynamicState) deviceExtensions[i++]= VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
-  if(dynamicState->dynamicState3.extendedDynamicState3ColorBlendEnable) deviceExtensions[i++]= VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+  if(dynamicState->dynamicState1.extendedDynamicState) {
+    i++;
+    deviceExtensions[i]= VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+  }
+  if(dynamicState->dynamicState3.extendedDynamicState3ColorBlendEnable){
+    i++;
+    deviceExtensions[i]= VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+}
 
   VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
   deviceInfo.queueCreateInfoCount = 1;
