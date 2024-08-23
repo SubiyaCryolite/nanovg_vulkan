@@ -284,11 +284,7 @@ int main() {
 
   printf("Using GPU device %lu\n", (unsigned long) idx);
 
-  NvgDynamicState dynamicState = {0};
-  dynamicState.dynamicState1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
-  dynamicState.dynamicState2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
-  dynamicState.dynamicState3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
-  VulkanDevice *device = createVulkanDevice(gpu[idx], &dynamicState);
+  VulkanDevice *device = createVulkanDevice(gpu[idx]);
 
   int winWidth, winHeight;
   glfwGetWindowSize(window, &winWidth, &winHeight);
@@ -306,9 +302,6 @@ int main() {
   create_info.cmdBuffer = cmd_buffer;
   create_info.swapchainImageCount = fb.swapchain_image_count;
   create_info.currentFrame = &fb.current_frame;
-  create_info.dynamicState1 = dynamicState.dynamicState1;
-  create_info.dynamicState2 = dynamicState.dynamicState2;
-  create_info.dynamicState3 = dynamicState.dynamicState3;
 
   int flags = 0;
 #ifndef NDEBUG
