@@ -307,6 +307,8 @@ static int vknvg_deleteTexture(VKNVGcontext *vk, VKNVGtexture *tex) {
   return 0;
 }
 
+PFN_vkCmdSetColorBlendEquationEXT vkCmdSetColorBlendEquation = 0;
+
 static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   VKNVGPipeline *ret = nullptr;
   if (vk->npipelines + 1 > vk->cpipelines) {
@@ -853,25 +855,29 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   vp.viewportCount = 1;
   vp.scissorCount = 1;
 
-  vk->createInfo.dynamicState1.extendedDynamicState = true;
-
   uint32_t NUM_DYNAMIC_STATES = 2;
   if (vk->createInfo.dynamicState1.extendedDynamicState)
     NUM_DYNAMIC_STATES += 3;
-  if (vk->createInfo.dynamicState3.extendedDynamicState3ColorBlendEquation)
+  if (vk->createInfo.dynamicState3.extendedDynamicState3ColorBlendEquation) {
     NUM_DYNAMIC_STATES++;
+    vkCmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(device, "vkCmdSetColorBlendEquationEXT");
+  }
 
-  uint32_t i = 0;
+  uint32_t i = 1;
   VkDynamicState *dynamicStateEnables = calloc(NUM_DYNAMIC_STATES, sizeof(VkDynamicState));
-  dynamicStateEnables[i] = VK_DYNAMIC_STATE_VIEWPORT;
-  dynamicStateEnables[i++] = VK_DYNAMIC_STATE_SCISSOR;
+  dynamicStateEnables[0] = VK_DYNAMIC_STATE_VIEWPORT;
+  dynamicStateEnables[1] = VK_DYNAMIC_STATE_SCISSOR;
   if (vk->createInfo.dynamicState1.extendedDynamicState) {
-    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
-    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
-    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_STENCIL_OP;
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_STENCIL_OP;
   }
   if (vk->createInfo.dynamicState3.extendedDynamicState3ColorBlendEquation) {
-    dynamicStateEnables[i++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
   }
 
   VkPipelineDynamicStateCreateInfo dynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
@@ -2077,7 +2083,7 @@ static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd,
     colorBlendEquation.srcAlphaBlendFactor = colorBlendAttachment.srcAlphaBlendFactor;
     colorBlendEquation.dstAlphaBlendFactor = colorBlendAttachment.dstAlphaBlendFactor;
     colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
-    //vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &colorBlendEquation);
+    vkCmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
   }
 
   if (vk->createInfo.dynamicState1.extendedDynamicState) {
