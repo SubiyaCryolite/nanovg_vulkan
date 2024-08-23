@@ -22,7 +22,13 @@ typedef struct VulkanDevice {
   VkCommandPool commandPool;
 } VulkanDevice;
 
-VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
+typedef struct NvgDynamicState {
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState1;
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2;
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3;
+} NvgDynamicState;
+
+VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, NvgDynamicState *dynamicState) {
   VulkanDevice *device = (VulkanDevice *)malloc(sizeof(VulkanDevice));
   memset(device, 0, sizeof(VulkanDevice));
 
@@ -51,13 +57,33 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   queue_info.pQueuePriorities = queuePriorities;
   queue_info.queueFamilyIndex = device->graphicsQueueFamilyIndex;
 
-  const char *deviceExtensions[] = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  };
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+  physicalDeviceFeatures.pNext = &dynamicState->dynamicState1;
+  vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures);
+
+  //explicitly enable all features
+  uint32_t enabledExtensionCount = 1;
+  VkDeviceCreateInfo createInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+  if(dynamicState->dynamicState1.extendedDynamicState){
+    enabledExtensionCount++;
+    createInfo.pNext = &dynamicState->dynamicState1;
+  }
+  if(dynamicState->dynamicState3.extendedDynamicState3ColorBlendEnable ){
+    enabledExtensionCount++;
+    dynamicState->dynamicState1.pNext = &dynamicState->dynamicState2;
+    dynamicState->dynamicState2.pNext = &dynamicState->dynamicState3;
+  }
+
+  uint32_t i=0;
+  const char *deviceExtensions[enabledExtensionCount];
+  deviceExtensions[i]= VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+  if(dynamicState->dynamicState1.extendedDynamicState) deviceExtensions[i++]= VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+  if(dynamicState->dynamicState3.extendedDynamicState3ColorBlendEnable) deviceExtensions[i++]= VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+
   VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
   deviceInfo.queueCreateInfoCount = 1;
   deviceInfo.pQueueCreateInfos = &queue_info;
-  deviceInfo.enabledExtensionCount = sizeof(deviceExtensions) / sizeof(deviceExtensions[0]);
+  deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = deviceExtensions;
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
@@ -155,7 +181,8 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   uint32_t extensions_count = 0;
   const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
 
-  const char **extensions = (const char **)calloc(extensions_count + append_extensions_count + apple_extensions_count, sizeof(char *));
+  uint32_t size = extensions_count + append_extensions_count + apple_extensions_count+1;
+  const char **extensions = (const char **)calloc(size, sizeof(char *));
 
   for (uint32_t i = 0; i < extensions_count; ++i) {
     extensions[i] = glfw_extensions[i];
