@@ -22,12 +22,6 @@ typedef struct VulkanDevice {
   VkCommandPool commandPool;
 } VulkanDevice;
 
-typedef struct NvgDynamicState {
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState1;
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2;
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3;
-} NvgDynamicState;
-
 VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   VulkanDevice *device = malloc(sizeof(VulkanDevice));
   memset(device, 0, sizeof(VulkanDevice));
@@ -69,25 +63,28 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   physicalDeviceFeatures2.pNext = &dynamicState1;
   vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures2);
 
-  bool isDynamicStateSupported = false;
-  bool isDynamicState3Supported = false;
+  bool enableDynamicState = false;
+  bool enableDynamicState3 = false;
 
   uint32_t count = 0;
-  uint32_t enabledExtensionCount = 1;
+  uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, NULL);
   VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
   for (uint32_t i = 0; i < count; i++) {
     if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0) {
-      isDynamicStateSupported = true;
+      if (dynamicState1.extendedDynamicState)
+        continue; // already active, no need
+      enableDynamicState = true;
       enabledExtensionCount++;
-      dynamicState1.extendedDynamicState = true;
+      dynamicState1.extendedDynamicState = VK_TRUE;
     }
     if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0) {
-      isDynamicState3Supported = true;
+      if (dynamicState3.extendedDynamicState3ColorBlendEquation)
+        continue; // already active, no need
+      enableDynamicState3 = true;
       enabledExtensionCount++;
-      dynamicState3.extendedDynamicState3ColorBlendEquation = true;
-      dynamicState3.extendedDynamicState3ColorBlendEnable = true;
+      dynamicState3.extendedDynamicState3ColorBlendEquation = VK_TRUE;
     }
   }
   free(extensions);
@@ -96,11 +93,11 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   const char *enabledExtensionName[enabledExtensionCount];
   enabledExtensionName[i] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
-  if (isDynamicStateSupported) {
+  if (enableDynamicState) {
     i++;
     enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
   }
-  if (isDynamicState3Supported) {
+  if (enableDynamicState3) {
     i++;
     enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
   }
@@ -110,6 +107,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   deviceInfo.pQueueCreateInfos = &queue_info;
   deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = enabledExtensionName;
+  deviceInfo.pEnabledFeatures = NULL;
   deviceInfo.pNext = &physicalDeviceFeatures2;
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
@@ -191,7 +189,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   static const char *other_extensions[] = {
           VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
   };
-  uint32_t other_extensions_count = 0;
+  uint32_t other_extensions_count = 1;
 
   static const char *append_extensions[] = {
           VK_EXT_DEBUG_UTILS_EXTENSION_NAME,

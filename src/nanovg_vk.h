@@ -19,6 +19,7 @@ enum NVGcreateFlags {
 typedef struct VKNVGCreateInfo {
   VkPhysicalDevice gpu;
   VkDevice device;
+  VkInstance instance;
   VkRenderPass renderpass;
   VkCommandBuffer *cmdBuffer;
   uint32_t swapchainImageCount;
@@ -307,8 +308,10 @@ static int vknvg_deleteTexture(VKNVGcontext *vk, VKNVGtexture *tex) {
   return 0;
 }
 
-PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation = 0;
-PFN_vkCmdSetPrimitiveTopology cmdSetPrimitiveTopology = 0;
+PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation = NULL;
+PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology = NULL;
+PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable = NULL;
+PFN_vkCmdSetStencilOpEXT cmdSetStencilOp = NULL;
 
 static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   VKNVGPipeline *ret = nullptr;
@@ -858,11 +861,9 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   uint32_t NUM_DYNAMIC_STATES = 2;
   if (vk->dynamicState1.extendedDynamicState) {
     NUM_DYNAMIC_STATES += 3;
-    cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopology) vkGetDeviceProcAddr(device, "vkCmdSetPrimitiveTopolog");
   }
   if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
     NUM_DYNAMIC_STATES++;
-    cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(device, "vkCmdSetColorBlendEquationEXT");
   }
 
   uint32_t i = 1;
@@ -2024,7 +2025,7 @@ static void vknvg_renderDelete(void *uptr) {
   free(vk);
 }
 
- void queryDynamicState(VKNVGcontext * vk) {
+void queryDynamicState(VKNVGcontext *vk) {
   vk->dynamicState1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
   vk->dynamicState1.pNext = &vk->dynamicState2;
   vk->dynamicState2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
@@ -2037,9 +2038,9 @@ static void vknvg_renderDelete(void *uptr) {
   physicalDeviceFeatures2.pNext = &vk->dynamicState1;
   vkGetPhysicalDeviceFeatures2(vk->createInfo.gpu, &physicalDeviceFeatures2);
 
-  printf("Dynamic State 1: %u\n",vk->dynamicState1.extendedDynamicState);
-  printf("Dynamic State 2: %u\n",vk->dynamicState2.extendedDynamicState2);
-  printf("Dynamic State 3: %u\n",vk->dynamicState3.extendedDynamicState3ColorBlendEnable);
+  printf("Dynamic State 1: %u\n", vk->dynamicState1.extendedDynamicState);
+  printf("Dynamic State 2: %u\n", vk->dynamicState2.extendedDynamicState2);
+  printf("Dynamic State 3: %u\n", vk->dynamicState3.extendedDynamicState3ColorBlendEnable);
 }
 
 NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
@@ -2072,6 +2073,12 @@ NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
 
   queryDynamicState(vk);
 
+  if (cmdSetStencilTestEnable == NULL) {
+    cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetPrimitiveTopologyEXT");
+    cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilTestEnableEXT");
+    cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilOpEXT");
+    cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetColorBlendEquationEXT");
+  }
   ctx = nvgCreateInternal(&params);
   if (ctx == nullptr)
     goto error;
@@ -2110,20 +2117,20 @@ static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd,
 
   if (vk->dynamicState1.extendedDynamicState) {
     VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
-    vkCmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
+    cmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
     if (ds.stencilTestEnable) {
-      vkCmdSetStencilOp(cmd,
-                        VK_STENCIL_FACE_FRONT_BIT,
-                        ds.front.failOp,
-                        ds.front.passOp,
-                        ds.front.depthFailOp,
-                        ds.front.compareOp);
-      vkCmdSetStencilOp(cmd,
-                        VK_STENCIL_FACE_BACK_BIT,
-                        ds.back.failOp,
-                        ds.back.passOp,
-                        ds.back.depthFailOp,
-                        ds.back.compareOp);
+      cmdSetStencilOp(cmd,
+                      VK_STENCIL_FACE_FRONT_BIT,
+                      ds.front.failOp,
+                      ds.front.passOp,
+                      ds.front.depthFailOp,
+                      ds.front.compareOp);
+      cmdSetStencilOp(cmd,
+                      VK_STENCIL_FACE_BACK_BIT,
+                      ds.back.failOp,
+                      ds.back.passOp,
+                      ds.back.depthFailOp,
+                      ds.back.compareOp);
     }
   }
 }
