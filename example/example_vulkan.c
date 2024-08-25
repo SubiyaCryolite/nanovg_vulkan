@@ -298,7 +298,6 @@ int main() {
   VKNVGCreateInfo create_info = {0};
   create_info.device = device->device;
   create_info.gpu = device->gpu;
-  create_info.instance = instance;
   create_info.renderpass = fb.render_pass;
   create_info.cmdBuffer = cmd_buffer;
   create_info.swapchainImageCount = fb.swapchain_image_count;
