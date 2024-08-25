@@ -51,16 +51,16 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   queue_info.pQueuePriorities = queuePriorities;
   queue_info.queueFamilyIndex = device->graphicsQueueFamilyIndex;
 
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState1 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
-  dynamicState1.pNext = &dynamicState2;
-  dynamicState2.pNext = &dynamicState3;
-  dynamicState3.pNext = NULL;
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+  extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
+  extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
+  extendedDynamicState3Features.pNext = NULL;
 
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
   physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures2.pNext = &dynamicState1;
+  physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
   vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures2);
 
   bool enableDynamicState = false;
@@ -72,19 +72,13 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
   for (uint32_t i = 0; i < count; i++) {
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0) {
-      if (dynamicState1.extendedDynamicState)
-        continue; // already active, no need
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0 && extendedDynamicStateFeatures.extendedDynamicState) {
       enableDynamicState = true;
       enabledExtensionCount++;
-      dynamicState1.extendedDynamicState = VK_TRUE;
     }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0) {
-      if (dynamicState3.extendedDynamicState3ColorBlendEquation)
-        continue; // already active, no need
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 && extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
       enableDynamicState3 = true;
       enabledExtensionCount++;
-      dynamicState3.extendedDynamicState3ColorBlendEquation = VK_TRUE;
     }
   }
   free(extensions);
@@ -108,7 +102,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = enabledExtensionName;
   deviceInfo.pEnabledFeatures = NULL;
-  deviceInfo.pNext = &physicalDeviceFeatures2;
+  deviceInfo.pNext = &extendedDynamicStateFeatures;
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
   assert(res == VK_SUCCESS);
@@ -184,7 +178,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   app_info.applicationVersion = 1;
   app_info.pEngineName = "NanoVG";
   app_info.engineVersion = 1;
-  app_info.apiVersion = VK_API_VERSION_1_0;
+  app_info.apiVersion = VK_API_VERSION_1_3;
 
   static const char *other_extensions[] = {
           VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
@@ -206,6 +200,14 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   if (!isApplePlatform) {
     apple_extensions_count = 0;
   }
+
+  uint32_t loader_version = VK_API_VERSION_1_0;
+  if (vkEnumerateInstanceVersion) {
+    uint32_t version;
+    if (vkEnumerateInstanceVersion(&version) == VK_SUCCESS)
+      loader_version = version;
+  }
+  printf("Vulkan loader API version: %i.%i\n", VK_VERSION_MAJOR(loader_version), VK_VERSION_MINOR(loader_version));
 
   uint32_t extensions_count = 0;
   const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&extensions_count);

@@ -308,6 +308,24 @@ static int vknvg_deleteTexture(VKNVGcontext *vk, VKNVGtexture *tex) {
   return 0;
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation;
+extern PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology;
+extern PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable;
+extern PFN_vkCmdSetStencilOpEXT cmdSetStencilOp;
+
+#ifdef __cplusplus
+}
+#endif
+
+#define vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation
+#define vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology
+#define vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable
+#define vkCmdSetStencilOpEXT cmdSetStencilOp
+
 PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation = NULL;
 PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology = NULL;
 PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable = NULL;
@@ -340,27 +358,32 @@ static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk,
     if (a->stencilTest != b->stencilTest) {
       return a->stencilTest - b->stencilTest;
     }
+    if (a->stencilFill != b->stencilFill) {
+      return a->stencilFill - b->stencilFill;
+    }
+    if (a->stencilStroke != b->stencilStroke) {
+      return a->stencilStroke - b->stencilStroke;
+    }
   }
+
 
   //look into these guys, it was one of the color states
-  if (a->stencilFill != b->stencilFill) {
-    return a->stencilFill - b->stencilFill;
-  }
-  if (a->stencilStroke != b->stencilStroke) {
-    return a->stencilStroke - b->stencilStroke;
-  }
-
   if (a->edgeAA != b->edgeAA) {
     return a->edgeAA - b->edgeAA;
   }
   if (a->edgeAAShader != b->edgeAAShader) {
     return a->edgeAAShader - b->edgeAAShader;
   }
-  if (a->colorWriteMask != b->colorWriteMask) {
-    return a->colorWriteMask - b->colorWriteMask;
+
+ // if (!vk->dynamicState3.extendedDynamicState3ColorWriteMask)
+    {
+    if (a->colorWriteMask != b->colorWriteMask) {
+      return a->colorWriteMask - b->colorWriteMask;
+    }
   }
 
-  if (!vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
+  //if (!vk->dynamicState3.extendedDynamicState3ColorBlendEquation)
+  {
     if (a->compositOperation.srcRGB != b->compositOperation.srcRGB) {
       return a->compositOperation.srcRGB - b->compositOperation.srcRGB;
     }
@@ -603,14 +626,10 @@ vknvg_compositOperationToColorBlendAttachmentState(
   state.alphaBlendOp = VK_BLEND_OP_ADD;
   state.colorWriteMask = vknvg_colorWriteMask(pipelineKey);
 
-  state.srcColorBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-          pipelineKey->compositOperation.srcRGB);
-  state.srcAlphaBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-          pipelineKey->compositOperation.srcAlpha);
-  state.dstColorBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-          pipelineKey->compositOperation.dstRGB);
-  state.dstAlphaBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(
-          pipelineKey->compositOperation.dstAlpha);
+  state.srcColorBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(pipelineKey->compositOperation.srcRGB);
+  state.srcAlphaBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(pipelineKey->compositOperation.srcAlpha);
+  state.dstColorBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(pipelineKey->compositOperation.dstRGB);
+  state.dstAlphaBlendFactor = vknvg_NVGblendFactorToVkBlendFactor(pipelineKey->compositOperation.dstAlpha);
 
   if (state.srcColorBlendFactor == VK_BLEND_FACTOR_MAX_ENUM ||
       state.srcAlphaBlendFactor == VK_BLEND_FACTOR_MAX_ENUM ||
@@ -862,9 +881,9 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   if (vk->dynamicState1.extendedDynamicState) {
     NUM_DYNAMIC_STATES += 3;
   }
-  if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
-    NUM_DYNAMIC_STATES++;
-  }
+  // if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
+  //   NUM_DYNAMIC_STATES++;
+  // }
 
   uint32_t i = 1;
   VkDynamicState *dynamicStateEnables = calloc(NUM_DYNAMIC_STATES, sizeof(VkDynamicState));
@@ -878,10 +897,10 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
     i++;
     dynamicStateEnables[i] = VK_DYNAMIC_STATE_STENCIL_OP;
   }
-  if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
-    i++;
-    dynamicStateEnables[i] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
-  }
+  // if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
+  //   i++;
+  //   dynamicStateEnables[i] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
+  // }
 
   VkPipelineDynamicStateCreateInfo dynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
   dynamicState.dynamicStateCount = NUM_DYNAMIC_STATES;
@@ -2073,12 +2092,11 @@ NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
 
   queryDynamicState(vk);
 
-  if (cmdSetStencilTestEnable == NULL) {
-    cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetPrimitiveTopologyEXT");
-    cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilTestEnableEXT");
-    cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilOpEXT");
-    cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetColorBlendEquationEXT");
-  }
+  cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetPrimitiveTopology");
+  cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilTestEnable");
+  cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilOp");
+  cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetColorBlendEquationEXT");
+
   ctx = nvgCreateInternal(&params);
   if (ctx == nullptr)
     goto error;
@@ -2099,21 +2117,21 @@ static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd,
   if (vk->dynamicState1.extendedDynamicState) {
     cmdSetPrimitiveTopology(cmd, pipelineKey->topology);
   }
-  if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
-    VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
-#ifdef __cplusplus
-    VkColorBlendEquationEXT colorBlendEquation = {};
-#else
-    VkColorBlendEquationEXT colorBlendEquation = {0};
-#endif
-    colorBlendEquation.srcColorBlendFactor = colorBlendAttachment.srcColorBlendFactor;
-    colorBlendEquation.dstColorBlendFactor = colorBlendAttachment.dstColorBlendFactor;
-    colorBlendEquation.colorBlendOp = colorBlendAttachment.colorBlendOp;
-    colorBlendEquation.srcAlphaBlendFactor = colorBlendAttachment.srcAlphaBlendFactor;
-    colorBlendEquation.dstAlphaBlendFactor = colorBlendAttachment.dstAlphaBlendFactor;
-    colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
-    cmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
-  }
+  //   if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
+  //     VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
+  // #ifdef __cplusplus
+  //     VkColorBlendEquationEXT colorBlendEquation = {};
+  // #else
+  //     VkColorBlendEquationEXT colorBlendEquation = {0};
+  // #endif
+  //     colorBlendEquation.srcColorBlendFactor = colorBlendAttachment.srcColorBlendFactor;
+  //     colorBlendEquation.dstColorBlendFactor = colorBlendAttachment.dstColorBlendFactor;
+  //     colorBlendEquation.colorBlendOp = colorBlendAttachment.colorBlendOp;
+  //     colorBlendEquation.srcAlphaBlendFactor = colorBlendAttachment.srcAlphaBlendFactor;
+  //     colorBlendEquation.dstAlphaBlendFactor = colorBlendAttachment.dstAlphaBlendFactor;
+  //     colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
+  //     cmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
+  //   }
 
   if (vk->dynamicState1.extendedDynamicState) {
     VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
