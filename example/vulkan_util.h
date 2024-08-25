@@ -22,6 +22,9 @@ typedef struct VulkanDevice {
   VkCommandPool commandPool;
 } VulkanDevice;
 
+static uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
+static const char *enabledExtensionName [4];
+
 VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   VulkanDevice *device = malloc(sizeof(VulkanDevice));
   memset(device, 0, sizeof(VulkanDevice));
@@ -67,7 +70,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   bool enableDynamicState3 = false;
 
   uint32_t count = 0;
-  uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
+
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, NULL);
   VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
@@ -84,7 +87,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   free(extensions);
 
   uint32_t i = 0;
-  const char *enabledExtensionName[enabledExtensionCount];
   enabledExtensionName[i] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
   if (enableDynamicState) {
     i++;

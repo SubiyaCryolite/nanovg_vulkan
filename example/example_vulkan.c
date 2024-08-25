@@ -302,6 +302,8 @@ int main() {
   create_info.cmdBuffer = cmd_buffer;
   create_info.swapchainImageCount = fb.swapchain_image_count;
   create_info.currentFrame = &fb.current_frame;
+  create_info.ppEnabledExtensionNames = enabledExtensionName;
+  create_info.enabledExtensionCount = enabledExtensionCount;
 
   int flags = 0;
 #ifndef NDEBUG
