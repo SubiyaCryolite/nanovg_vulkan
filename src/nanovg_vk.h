@@ -2092,9 +2092,9 @@ NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
 
   queryDynamicState(vk);
 
-  cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetPrimitiveTopology");
-  cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilTestEnable");
-  cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilOp");
+  cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetPrimitiveTopologyEXT");
+  cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilTestEnableEXT");
+  cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilOpEXT");
   cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetColorBlendEquationEXT");
 
   ctx = nvgCreateInternal(&params);

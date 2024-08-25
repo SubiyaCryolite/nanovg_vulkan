@@ -86,7 +86,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   uint32_t i = 0;
   const char *enabledExtensionName[enabledExtensionCount];
   enabledExtensionName[i] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-
   if (enableDynamicState) {
     i++;
     enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
@@ -178,7 +177,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   app_info.applicationVersion = 1;
   app_info.pEngineName = "NanoVG";
   app_info.engineVersion = 1;
-  app_info.apiVersion = VK_API_VERSION_1_3;
+  app_info.apiVersion = VK_API_VERSION_1_0;
 
   static const char *other_extensions[] = {
           VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
@@ -242,17 +241,17 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   if (enable_debug_layer) {
     inst_info.enabledLayerCount = sizeof(instance_validation_layers) / sizeof(instance_validation_layers[0]);
     inst_info.ppEnabledLayerNames = instance_validation_layers;
-
-    uint32_t layerCount = 0;
-    vkEnumerateInstanceLayerProperties(&layerCount, 0);
-    VkLayerProperties *layerprop = (VkLayerProperties *) malloc(sizeof(VkLayerProperties) * layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, layerprop);
-    printf("vkEnumerateInstanceLayerProperties:");
-    for (uint32_t i = 0; i < layerCount; ++i) {
-      printf("%s\n", layerprop[i].layerName);
-    }
-    free(layerprop);
   }
+
+  uint32_t layerCount = 0;
+  vkEnumerateInstanceLayerProperties(&layerCount, 0);
+  VkLayerProperties *layerprop = malloc(sizeof(VkLayerProperties) * layerCount);
+  vkEnumerateInstanceLayerProperties(&layerCount, layerprop);
+  printf("vkEnumerateInstanceLayerProperties:");
+  for (uint32_t i = 0; i < layerCount; ++i) {
+    printf("%s\n", layerprop[i].layerName);
+  }
+  free(layerprop);
 
   VkInstance inst;
   VkResult res;
