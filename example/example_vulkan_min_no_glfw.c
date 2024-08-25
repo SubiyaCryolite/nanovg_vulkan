@@ -289,7 +289,7 @@ void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, Fra
 }
 
 void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg,
-                        FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data, VkInstance instance){
+                        FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data){
     *device = createVulkanDevice(gpu);
 
     vkGetDeviceQueue((*device)->device, (*device)->graphicsQueueFamilyIndex, 0, queue);
@@ -299,7 +299,6 @@ void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidt
     VKNVGCreateInfo create_info = {0};
     create_info.device = (*device)->device;
     create_info.gpu = (*device)->gpu;
-    create_info.instance = instance;
     create_info.renderpass = fb->render_pass;
     create_info.cmdBuffer = (*cmd_buffer);
     create_info.swapchainImageCount = fb->swapchain_image_count;
@@ -373,7 +372,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     int winWidth = os_window.app_data.iResolution[0];
     int winHeight = os_window.app_data.iResolution[1];
-    init_nanovg_vulkan(gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data, instance);
+    init_nanovg_vulkan(gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data);
 
     done = false;
     while (!done)
@@ -451,7 +450,7 @@ int main(int argc, char **argv)
   VkCommandBuffer* cmd_buffer;
   DemoData data;
   PerfGraph fps;
-  init_nanovg_vulkan(gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data, instance);
+  init_nanovg_vulkan(gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data);
 
     while (!os_window.app_data.quit)
     {
