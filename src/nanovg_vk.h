@@ -19,11 +19,12 @@ enum NVGcreateFlags {
 typedef struct VKNVGCreateInfo {
   VkPhysicalDevice gpu;
   VkDevice device;
-  VkInstance instance;
   VkRenderPass renderpass;
   VkCommandBuffer *cmdBuffer;
   uint32_t swapchainImageCount;
   uint32_t *currentFrame;
+  uint32_t enabledExtensionCount;
+  const char* const*      ppEnabledExtensionNames;
   const VkAllocationCallbacks *allocator;// Allocator for vulkan. can be null
 } VKNVGCreateInfo;
 #ifdef __cplusplus
@@ -157,6 +158,12 @@ typedef struct VKNVGDepthSimplePipeline {
   VkPipelineLayout pipelineLayout;
 } VKNVGDepthSimplePipeline;
 
+typedef struct VkNvgDynamic {
+  bool extended;
+  bool colorBlendEquation;
+  bool colorWriteMask;
+} VkNvgDynamic;
+
 typedef struct VKNVGcontext {
   VKNVGCreateInfo createInfo;
 
@@ -209,9 +216,8 @@ typedef struct VKNVGcontext {
   VkShaderModule fillFragShaderAA;
   VkShaderModule fillVertShader;
   VkQueue queue;
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState1;
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2;
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3;
+
+  VkNvgDynamic dynamicState;
 } VKNVGcontext;
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd,
@@ -316,6 +322,7 @@ extern PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation;
 extern PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology;
 extern PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable;
 extern PFN_vkCmdSetStencilOpEXT cmdSetStencilOp;
+extern PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask;
 
 #ifdef __cplusplus
 }
@@ -325,11 +332,13 @@ extern PFN_vkCmdSetStencilOpEXT cmdSetStencilOp;
 #define vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology
 #define vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable
 #define vkCmdSetStencilOpEXT cmdSetStencilOp
+#define vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask
 
 PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation = NULL;
 PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology = NULL;
 PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable = NULL;
 PFN_vkCmdSetStencilOpEXT cmdSetStencilOp = NULL;
+PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask = NULL;
 
 static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   VKNVGPipeline *ret = nullptr;
@@ -351,7 +360,14 @@ static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
 static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk,
                                           const VKNVGCreatePipelineKey *a,
                                           const VKNVGCreatePipelineKey *b) {
-  if (!vk->dynamicState1.extendedDynamicState) {
+  if (a->edgeAA != b->edgeAA) {
+    return a->edgeAA - b->edgeAA;
+  }
+  if (a->edgeAAShader != b->edgeAAShader) {
+    return a->edgeAAShader - b->edgeAAShader;
+  }
+
+  if (!vk->dynamicState.extended) {
     if (a->topology != b->topology) {
       return a->topology - b->topology;
     }
@@ -366,24 +382,13 @@ static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk,
     }
   }
 
-
-  //look into these guys, it was one of the color states
-  if (a->edgeAA != b->edgeAA) {
-    return a->edgeAA - b->edgeAA;
-  }
-  if (a->edgeAAShader != b->edgeAAShader) {
-    return a->edgeAAShader - b->edgeAAShader;
-  }
-
- // if (!vk->dynamicState3.extendedDynamicState3ColorWriteMask)
-    {
+  if (!vk->dynamicState.colorWriteMask) {
     if (a->colorWriteMask != b->colorWriteMask) {
       return a->colorWriteMask - b->colorWriteMask;
     }
   }
 
-  //if (!vk->dynamicState3.extendedDynamicState3ColorBlendEquation)
-  {
+  if (!vk->dynamicState.colorBlendEquation) {
     if (a->compositOperation.srcRGB != b->compositOperation.srcRGB) {
       return a->compositOperation.srcRGB - b->compositOperation.srcRGB;
     }
@@ -808,6 +813,16 @@ static VkFlags vknvg_cullMode(VKNVGCreatePipelineKey *pipelinekey) {
   return VK_CULL_MODE_BACK_BIT;
 }
 
+static bool isExtensionEnabled(const VKNVGcontext *vk, const char *extensionName) {
+  const char * arr = vk->createInfo.ppEnabledExtensionNames[0];
+  const char * arr1 = vk->createInfo.ppEnabledExtensionNames[1];
+  const char * arr2 = vk->createInfo.ppEnabledExtensionNames[2];
+  for (uint32_t i = 0; i < vk->createInfo.enabledExtensionCount; i++) {
+    return strcmp(arr[i], extensionName) == 0;
+  }
+  return false;
+}
+
 static VKNVGPipeline *
 vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   VkDevice device = vk->createInfo.device;
@@ -877,19 +892,50 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   vp.viewportCount = 1;
   vp.scissorCount = 1;
 
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState1;
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2;
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3;
+
+  dynamicState1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+  dynamicState1.pNext = &dynamicState2;
+  dynamicState2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+  dynamicState2.pNext = &dynamicState3;
+  dynamicState3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
+  dynamicState3.pNext = NULL;
+
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
+  physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  physicalDeviceFeatures2.pNext = &dynamicState1;
+  vkGetPhysicalDeviceFeatures2(vk->createInfo.gpu, &physicalDeviceFeatures2);
+
   uint32_t NUM_DYNAMIC_STATES = 2;
-  if (vk->dynamicState1.extendedDynamicState) {
-    NUM_DYNAMIC_STATES += 3;
+  //compare against API version or presence of extensions
+  if (dynamicState1.extendedDynamicState) {
+    if (vk->gpuProperties.apiVersion >= VK_API_VERSION_1_3 || isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
+      vk->dynamicState.extended = true;
+      NUM_DYNAMIC_STATES++;//VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY
+      NUM_DYNAMIC_STATES++;//VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE
+      NUM_DYNAMIC_STATES++;//VK_DYNAMIC_STATE_STENCIL_OP
+    }
   }
-  // if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
-  //   NUM_DYNAMIC_STATES++;
-  // }
+  if (dynamicState3.extendedDynamicState3ColorBlendEquation) {
+    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
+      vk->dynamicState.colorBlendEquation = true;
+      NUM_DYNAMIC_STATES++;//VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT
+    }
+  }
+  if (dynamicState3.extendedDynamicState3ColorWriteMask) {
+    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
+      vk->dynamicState.colorWriteMask = true;
+      NUM_DYNAMIC_STATES++;//VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT
+    }
+  }
 
   uint32_t i = 1;
   VkDynamicState *dynamicStateEnables = calloc(NUM_DYNAMIC_STATES, sizeof(VkDynamicState));
   dynamicStateEnables[0] = VK_DYNAMIC_STATE_VIEWPORT;
   dynamicStateEnables[1] = VK_DYNAMIC_STATE_SCISSOR;
-  if (vk->dynamicState1.extendedDynamicState) {
+  if (vk->dynamicState.extended) {
     i++;
     dynamicStateEnables[i] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
     i++;
@@ -897,10 +943,14 @@ vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
     i++;
     dynamicStateEnables[i] = VK_DYNAMIC_STATE_STENCIL_OP;
   }
-  // if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
-  //   i++;
-  //   dynamicStateEnables[i] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
-  // }
+  if (vk->dynamicState.colorBlendEquation) {
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
+  }
+  if (vk->dynamicState.colorWriteMask) {
+    i++;
+    dynamicStateEnables[i] = VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
+  }
 
   VkPipelineDynamicStateCreateInfo dynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
   dynamicState.dynamicStateCount = NUM_DYNAMIC_STATES;
@@ -2044,24 +2094,6 @@ static void vknvg_renderDelete(void *uptr) {
   free(vk);
 }
 
-void queryDynamicState(VKNVGcontext *vk) {
-  vk->dynamicState1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
-  vk->dynamicState1.pNext = &vk->dynamicState2;
-  vk->dynamicState2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
-  vk->dynamicState2.pNext = &vk->dynamicState3;
-  vk->dynamicState3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
-  vk->dynamicState3.pNext = NULL;
-
-  VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
-  physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures2.pNext = &vk->dynamicState1;
-  vkGetPhysicalDeviceFeatures2(vk->createInfo.gpu, &physicalDeviceFeatures2);
-
-  printf("Dynamic State 1: %u\n", vk->dynamicState1.extendedDynamicState);
-  printf("Dynamic State 2: %u\n", vk->dynamicState2.extendedDynamicState2);
-  printf("Dynamic State 3: %u\n", vk->dynamicState3.extendedDynamicState3ColorBlendEnable);
-}
-
 NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
   NVGparams params;
   NVGcontext *ctx = nullptr;
@@ -2090,12 +2122,11 @@ NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
   vk->createInfo = createInfo;
   vk->queue = queue;
 
-  queryDynamicState(vk);
-
-  cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetPrimitiveTopologyEXT");
-  cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilTestEnableEXT");
-  cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetStencilOpEXT");
-  cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetInstanceProcAddr(vk->createInfo.instance, "vkCmdSetColorBlendEquationEXT");
+  cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
+  cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT");
+  cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT");
+  cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT");
+  cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT");
 
   ctx = nvgCreateInternal(&params);
   if (ctx == nullptr)
@@ -2114,41 +2145,44 @@ void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd,
                                   const VKNVGCreatePipelineKey *pipelineKey) {
   // set defaults before changing state in calls
-  if (vk->dynamicState1.extendedDynamicState) {
-    cmdSetPrimitiveTopology(cmd, pipelineKey->topology);
+  if (vk->dynamicState.extended) {
+    vkCmdSetPrimitiveTopologyEXT(cmd, pipelineKey->topology);
   }
-  //   if (vk->dynamicState3.extendedDynamicState3ColorBlendEquation) {
-  //     VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
-  // #ifdef __cplusplus
-  //     VkColorBlendEquationEXT colorBlendEquation = {};
-  // #else
-  //     VkColorBlendEquationEXT colorBlendEquation = {0};
-  // #endif
-  //     colorBlendEquation.srcColorBlendFactor = colorBlendAttachment.srcColorBlendFactor;
-  //     colorBlendEquation.dstColorBlendFactor = colorBlendAttachment.dstColorBlendFactor;
-  //     colorBlendEquation.colorBlendOp = colorBlendAttachment.colorBlendOp;
-  //     colorBlendEquation.srcAlphaBlendFactor = colorBlendAttachment.srcAlphaBlendFactor;
-  //     colorBlendEquation.dstAlphaBlendFactor = colorBlendAttachment.dstAlphaBlendFactor;
-  //     colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
-  //     cmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
-  //   }
+  if (vk->dynamicState.colorWriteMask) {
+    vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &pipelineKey->colorWriteMask);
+  }
+  if (vk->dynamicState.colorBlendEquation) {
+    VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
+#ifdef __cplusplus
+    VkColorBlendEquationEXT colorBlendEquation = {};
+#else
+    VkColorBlendEquationEXT colorBlendEquation = {0};
+#endif
+    colorBlendEquation.srcColorBlendFactor = colorBlendAttachment.srcColorBlendFactor;
+    colorBlendEquation.dstColorBlendFactor = colorBlendAttachment.dstColorBlendFactor;
+    colorBlendEquation.colorBlendOp = colorBlendAttachment.colorBlendOp;
+    colorBlendEquation.srcAlphaBlendFactor = colorBlendAttachment.srcAlphaBlendFactor;
+    colorBlendEquation.dstAlphaBlendFactor = colorBlendAttachment.dstAlphaBlendFactor;
+    colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
+    vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &colorBlendEquation);
+  }
 
-  if (vk->dynamicState1.extendedDynamicState) {
+  if (vk->dynamicState.extended) {
     VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
-    cmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
+    vkCmdSetStencilTestEnableEXT(cmd, ds.stencilTestEnable);
     if (ds.stencilTestEnable) {
-      cmdSetStencilOp(cmd,
-                      VK_STENCIL_FACE_FRONT_BIT,
-                      ds.front.failOp,
-                      ds.front.passOp,
-                      ds.front.depthFailOp,
-                      ds.front.compareOp);
-      cmdSetStencilOp(cmd,
-                      VK_STENCIL_FACE_BACK_BIT,
-                      ds.back.failOp,
-                      ds.back.passOp,
-                      ds.back.depthFailOp,
-                      ds.back.compareOp);
+      vkCmdSetStencilOpEXT(cmd,
+                           VK_STENCIL_FACE_FRONT_BIT,
+                           ds.front.failOp,
+                           ds.front.passOp,
+                           ds.front.depthFailOp,
+                           ds.front.compareOp);
+      vkCmdSetStencilOpEXT(cmd,
+                           VK_STENCIL_FACE_BACK_BIT,
+                           ds.back.failOp,
+                           ds.back.passOp,
+                           ds.back.depthFailOp,
+                           ds.back.compareOp);
     }
   }
 }
