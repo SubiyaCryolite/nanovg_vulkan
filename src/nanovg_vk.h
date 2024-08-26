@@ -136,7 +136,6 @@ typedef struct VKNVGCreatePipelineKey {
   bool stencilFill;
   bool stencilTest;
   bool edgeAA;
-  bool edgeAAShader;
   VkPrimitiveTopology topology;
   NVGcompositeOperationState compositOperation;
   VkColorComponentFlags colorWriteMask; // set and compare independently
@@ -350,13 +349,6 @@ static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   return ret;
 }
 static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk, const VKNVGCreatePipelineKey *a, const VKNVGCreatePipelineKey *b) {
-  if (a->edgeAA != b->edgeAA) {
-    return a->edgeAA - b->edgeAA;
-  }
-  if (a->edgeAAShader != b->edgeAAShader) {
-    return a->edgeAAShader - b->edgeAAShader;
-  }
-
   if (!vk->dynamicState.extended) {
     if (a->topology != b->topology) {
       return a->topology - b->topology;
@@ -379,6 +371,9 @@ static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk, const VKNVGCreatePip
   }
 
   if (!vk->dynamicState.colorBlendEquation) {
+    if (a->edgeAA != b->edgeAA) {
+      return a->edgeAA - b->edgeAA;
+    }
     if (a->compositOperation.srcRGB != b->compositOperation.srcRGB) {
       return a->compositOperation.srcRGB - b->compositOperation.srcRGB;
     }
@@ -764,8 +759,10 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
 
   VkDescriptorSetLayout descLayout = vk->descLayout;
   VkShaderModule vert_shader = vk->fillVertShader;
-  VkShaderModule frag_shader = vk->fillFragShader;
-  VkShaderModule frag_shader_aa = vk->fillFragShaderAA;
+  VkShaderModule frag_shader= vk->fillFragShader;
+  if (vk->flags & NVG_ANTIALIAS) {
+    frag_shader = vk->fillFragShaderAA;
+  }
 #ifdef __cplusplus
   VkVertexInputBindingDescription vi_bindings[1] = {{}};
 #else
@@ -877,9 +874,6 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   shaderStages[1].module = frag_shader;
   shaderStages[1].pName = "main";
-  if (pipelinekey->edgeAAShader) {
-    shaderStages[1].module = frag_shader_aa;
-  }
 
   VkGraphicsPipelineCreateInfo pipelineCreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
   pipelineCreateInfo.layout = pipelineLayout;
@@ -1170,7 +1164,6 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_of
   pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 #endif
   pipelineKey.stencilFill = true;
-  pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
   vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
@@ -1234,7 +1227,6 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call, uint32_t descrip
 #else
   pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 #endif
-  pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
   vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
@@ -1278,9 +1270,6 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_
 #endif
     pipelineKey.compositOperation = call->compositOperation;
     pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-
-    pipelineKey.edgeAAShader = false;
-    pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
     // Fill stencil with 1 if stencil EQUAL passes
     pipelineKey.stencilStroke = VKNVG_STENCIL_STROKE_FILL;
@@ -1330,7 +1319,6 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_
     pipelineKey.compositOperation = call->compositOperation;
     pipelineKey.stencilFill = false;
     pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
     vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
     vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
@@ -1363,7 +1351,6 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call, uint32_t descript
   pipelineKey.compositOperation = call->compositOperation;
   pipelineKey.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   pipelineKey.stencilFill = false;
-  pipelineKey.edgeAAShader = vk->flags & NVG_ANTIALIAS;
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
   vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
