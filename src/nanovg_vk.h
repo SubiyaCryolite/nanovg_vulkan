@@ -207,9 +207,6 @@ typedef struct VKNVGcontext {
   VKNVGBuffer *vertUniformBuffer;
   VKNVGBuffer *fragUniformBuffer;
 
-  VkBuffer *vertUniformBufferRef;
-  VkBuffer *fragUniformBufferRef;
-
   VKNVGPipeline *currentPipeline;
 
   VkShaderModule fillFragShader;
@@ -1100,39 +1097,33 @@ static void vknvg_setUniforms(VKNVGcontext *vk, VkDescriptorSet descSet, int uni
 #else
   VkDescriptorBufferInfo vertUniformBufferInfo = {0};
 #endif
-  if (vk->vertUniformBufferRef[currentFrame] != vk->vertUniformBuffer[currentFrame].buffer) {
-    vertUniformBufferInfo.buffer = vk->vertUniformBuffer[currentFrame].buffer;
-    vertUniformBufferInfo.offset = 0;
-    vertUniformBufferInfo.range = sizeof(vk->view);
+  vertUniformBufferInfo.buffer = vk->vertUniformBuffer[currentFrame].buffer;
+  vertUniformBufferInfo.offset = 0;
+  vertUniformBufferInfo.range = sizeof(vk->view);
 
-    writes[0].dstSet = descSet;
-    writes[0].descriptorCount = 1;
-    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    writes[0].pBufferInfo = &vertUniformBufferInfo;
-    writes[0].dstArrayElement = 0;
-    writes[0].dstBinding = 0;
-    vk->vertUniformBufferRef[currentFrame] = vk->vertUniformBuffer[currentFrame].buffer;
-    descriptorWriteCount++;
-  }
+  writes[0].dstSet = descSet;
+  writes[0].descriptorCount = 1;
+  writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  writes[0].pBufferInfo = &vertUniformBufferInfo;
+  writes[0].dstArrayElement = 0;
+  writes[0].dstBinding = 0;
+  descriptorWriteCount++;
 
 #ifdef __cplusplus
   VkDescriptorBufferInfo uniform_buffer_info = {};
 #else
   VkDescriptorBufferInfo uniform_buffer_info = {0};
 #endif
-  if (vk->fragUniformBufferRef[currentFrame] != vk->fragUniformBuffer[currentFrame].buffer) {
-    uniform_buffer_info.buffer = vk->fragUniformBuffer[currentFrame].buffer;
-    uniform_buffer_info.offset = uniformOffset;
-    uniform_buffer_info.range = sizeof(VKNVGfragUniforms);
+  uniform_buffer_info.buffer = vk->fragUniformBuffer[currentFrame].buffer;
+  uniform_buffer_info.offset = uniformOffset;
+  uniform_buffer_info.range = sizeof(VKNVGfragUniforms);
 
-    writes[descriptorWriteCount].dstSet = descSet;
-    writes[descriptorWriteCount].descriptorCount = 1;
-    writes[descriptorWriteCount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    writes[descriptorWriteCount].pBufferInfo = &uniform_buffer_info;
-    writes[descriptorWriteCount].dstBinding = 1;
-    vk->fragUniformBufferRef[currentFrame] = vk->fragUniformBuffer[currentFrame].buffer;
-    descriptorWriteCount++;
-  }
+  writes[descriptorWriteCount].dstSet = descSet;
+  writes[descriptorWriteCount].descriptorCount = 1;
+  writes[descriptorWriteCount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  writes[descriptorWriteCount].pBufferInfo = &uniform_buffer_info;
+  writes[descriptorWriteCount].dstBinding = 1;
+  descriptorWriteCount++;
 
   VkDescriptorImageInfo image_info;
 
@@ -1610,8 +1601,6 @@ static void vknvg_renderFlush(void *uptr) {
     vk->vertexBuffer = (VKNVGBuffer *) calloc(maxFramesInFlight, sizeof(VKNVGBuffer));
     vk->fragUniformBuffer = (VKNVGBuffer *) calloc(maxFramesInFlight, sizeof(VKNVGBuffer));
     vk->vertUniformBuffer = (VKNVGBuffer *) calloc(maxFramesInFlight, sizeof(VKNVGBuffer));
-    vk->vertUniformBufferRef = (VkBuffer *) calloc(maxFramesInFlight, sizeof(VkBuffer));
-    vk->fragUniformBufferRef = (VkBuffer *) calloc(maxFramesInFlight, sizeof(VkBuffer));
   }
 
   int i;
