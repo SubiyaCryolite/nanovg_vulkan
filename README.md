@@ -5,11 +5,11 @@ This repo is based on the amazing work done by [danilw](https://github.com/danil
 # Goal
 
 To extend and optimise the Vulkan 1.0 implementation of NanoVG. Specifically by doing the following:
- - Optimising pipeline selection
- - Optimising pipeline creation
- - Simplifying code
- - Using Push constants where possible
- - Possibly supporting SSBOs for MDI
+- [ ] Optimising pipeline selection and creation via use of `VK_EXT_extended_dynamic_state` and `VK_EXT_extended_dynamic_state3`
+- [ ] Using one fragment shader, toggling behaviour with new dedicated `EDGE_AA` variable
+- [ ] Using Push constants
+- [ ] Simplifying code
+- [ ] Possibly supporting SSBOs for MDI
 
 ---
 
