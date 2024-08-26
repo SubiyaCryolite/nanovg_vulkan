@@ -1,8 +1,6 @@
-#version 400
-#extension GL_ARB_separate_shader_objects  : enable
-#extension GL_ARB_shading_language_420pack : enable
+#version 450
 
-layout(std140,binding = 1) uniform frag {
+layout(std140,binding = 0) uniform frag {
 		mat3 scissorMat;
 		mat3 paintMat;
 		vec4 innerCol;
@@ -17,7 +15,7 @@ layout(std140,binding = 1) uniform frag {
 		int texType;
 		int type;
 	};
-layout(binding = 2)uniform sampler2D tex;
+layout(binding = 1)uniform sampler2D tex;
 layout(location = 0) in vec2 ftcoord;
 layout(location = 1) in vec2 fpos;
 layout(location = 0) out vec4 outColor;
