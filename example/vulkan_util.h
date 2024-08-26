@@ -22,8 +22,8 @@ typedef struct VulkanDevice {
   VkCommandPool commandPool;
 } VulkanDevice;
 
-static uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
-static const char *enabledExtensionName [4];
+uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
+const char *enabledExtensionName[64];
 
 VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   VulkanDevice *device = malloc(sizeof(VulkanDevice));
