@@ -47,7 +47,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
       device->graphicsQueueFamilyIndex = i;
     }
   }
-
   float queuePriorities[1] = {0.0};
   VkDeviceQueueCreateInfo queue_info = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
   queue_info.queueCount = 1;
