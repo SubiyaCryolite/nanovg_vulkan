@@ -1,8 +1,6 @@
-#version 400
-#extension GL_ARB_separate_shader_objects  : enable
-#extension GL_ARB_shading_language_420pack : enable
+#version 450
 
-layout (binding = 0) uniform buffer{
+layout (push_constant) uniform vert {
   vec2 viewSize;
 };
 
