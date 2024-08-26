@@ -36,7 +36,8 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   vkGetPhysicalDeviceQueueFamilyProperties(gpu, &device->queueFamilyPropertiesCount, NULL);
   assert(device->queueFamilyPropertiesCount >= 1);
 
-  device->queueFamilyProperties = (VkQueueFamilyProperties *) malloc(device->queueFamilyPropertiesCount * sizeof(VkQueueFamilyProperties));
+  device->queueFamilyProperties =
+    (VkQueueFamilyProperties *) malloc(device->queueFamilyPropertiesCount * sizeof(VkQueueFamilyProperties));
 
   vkGetPhysicalDeviceQueueFamilyProperties(gpu, &device->queueFamilyPropertiesCount, device->queueFamilyProperties);
   assert(device->queueFamilyPropertiesCount >= 1);
@@ -53,9 +54,12 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   queue_info.pQueuePriorities = queuePriorities;
   queue_info.queueFamilyIndex = device->graphicsQueueFamilyIndex;
 
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
   extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
   extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
   extendedDynamicState3Features.pNext = NULL;
@@ -66,6 +70,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures2);
 
   bool enableDynamicState = false;
+  bool enableDynamicState2 = false;
   bool enableDynamicState3 = false;
 
   uint32_t count = 0;
@@ -73,14 +78,28 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, NULL);
   VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
+
+  extendedDynamicStateFeatures.pNext = NULL;
+  extendedDynamicState2Features.pNext = NULL;
+  extendedDynamicState3Features.pNext = NULL;
+
   for (uint32_t i = 0; i < count; i++) {
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0 && extendedDynamicStateFeatures.extendedDynamicState) {
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
+        extendedDynamicStateFeatures.extendedDynamicState) {
       enableDynamicState = true;
       enabledExtensionCount++;
     }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 && extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
+        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
+      enableDynamicState2 = true;
+      enabledExtensionCount++;
+      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
+    }
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
+        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
       enableDynamicState3 = true;
       enabledExtensionCount++;
+      extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
     }
   }
   free(extensions);
@@ -90,6 +109,10 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   if (enableDynamicState) {
     i++;
     enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+  }
+  if (enableDynamicState2) {
+    i++;
+    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME;
   }
   if (enableDynamicState3) {
     i++;
@@ -102,7 +125,8 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = enabledExtensionName;
   deviceInfo.pEnabledFeatures = NULL;
-  deviceInfo.pNext = &extendedDynamicStateFeatures;
+  if (enableDynamicState)
+    deviceInfo.pNext = &extendedDynamicStateFeatures;
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
   assert(res == VK_SUCCESS);
@@ -162,7 +186,10 @@ typedef struct FrameBuffers {
   VkFence *flight_fence;
 } FrameBuffers;
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData) {
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                                    VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+                                                    void *pUserData) {
   printf("%s\n", pCallbackData->pMessage);
   return VK_FALSE;
 }
@@ -181,12 +208,12 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   app_info.apiVersion = VK_API_VERSION_1_0;
 
   static const char *other_extensions[] = {
-          VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
   };
   uint32_t other_extensions_count = 1;
 
   static const char *append_extensions[] = {
-          VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
   };
   uint32_t append_extensions_count = 1;
   if (!enable_debug_layer) {
@@ -194,7 +221,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   }
 
   static const char *apple_extensions[] = {
-          VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+    VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
   };
   uint32_t apple_extensions_count = 1;
   if (!isApplePlatform) {
@@ -288,10 +315,15 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.messageSeverity =
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = debugCallback;
-    PFN_vkCreateDebugUtilsMessengerEXT fn_vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(inst, "vkCreateDebugUtilsMessengerEXT");
+    PFN_vkCreateDebugUtilsMessengerEXT fn_vkCreateDebugUtilsMessengerEXT =
+      (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(inst, "vkCreateDebugUtilsMessengerEXT");
     if (!fn_vkCreateDebugUtilsMessengerEXT) {
       printf("vkCreateDebugUtilsMessengerEXT not found\n");
     } else {
@@ -309,7 +341,8 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
 static void destroyDebugCallback(VkInstance instance) {
   if (!debugMessenger)
     return;
-  PFN_vkDestroyDebugUtilsMessengerEXT fn_vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+  PFN_vkDestroyDebugUtilsMessengerEXT fn_vkDestroyDebugUtilsMessengerEXT =
+    (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
   if (fn_vkDestroyDebugUtilsMessengerEXT) {
     fn_vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL);
   }
@@ -340,7 +373,8 @@ VkCommandBuffer *createCmdBuffer(VkDevice device, VkCommandPool cmd_pool, uint32
   return cmd_buffer;
 }
 
-bool memory_type_from_properties(VkPhysicalDeviceMemoryProperties memoryProps, uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex) {
+bool memory_type_from_properties(VkPhysicalDeviceMemoryProperties memoryProps, uint32_t typeBits,
+                                 VkFlags requirements_mask, uint32_t *typeIndex) {
   // Search memtypes to find first index with those properties
   for (uint32_t i = 0; i < memoryProps.memoryTypeCount; i++) {
     if ((typeBits & 1) == 1) {
@@ -361,7 +395,8 @@ DepthBuffer createDepthBuffer(const VulkanDevice *device, int width, int height)
   depth.format = VK_FORMAT_D24_UNORM_S8_UINT;
 
 #define dformats 3
-  const VkFormat depth_formats[dformats] = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT};
+  const VkFormat depth_formats[dformats] = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT,
+                                            VK_FORMAT_D16_UNORM_S8_UINT};
   VkImageTiling image_tilling;
   for (int i = 0; i < dformats; i++) {
     VkFormatProperties fprops;
@@ -415,7 +450,8 @@ DepthBuffer createDepthBuffer(const VulkanDevice *device, int width, int height)
   view_info.subresourceRange.layerCount = 1;
   view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
-  if (depth_format == VK_FORMAT_D16_UNORM_S8_UINT || depth_format == VK_FORMAT_D24_UNORM_S8_UINT || depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+  if (depth_format == VK_FORMAT_D16_UNORM_S8_UINT || depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
+      depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
     view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
   }
 
@@ -430,7 +466,8 @@ DepthBuffer createDepthBuffer(const VulkanDevice *device, int width, int height)
   mem_alloc.allocationSize = mem_reqs.size;
   /* Use the memory properties to determine the type of memory required */
 
-  bool pass = memory_type_from_properties(device->memoryProperties, mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mem_alloc.memoryTypeIndex);
+  bool pass = memory_type_from_properties(device->memoryProperties, mem_reqs.memoryTypeBits,
+                                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mem_alloc.memoryTypeIndex);
   assert(pass);
 
   /* Allocate memory */
@@ -449,7 +486,8 @@ DepthBuffer createDepthBuffer(const VulkanDevice *device, int width, int height)
   return depth;
 }
 
-static void setupImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageAspectFlags aspectMask, VkImageLayout old_image_layout, VkImageLayout new_image_layout) {
+static void setupImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageAspectFlags aspectMask,
+                             VkImageLayout old_image_layout, VkImageLayout new_image_layout) {
 
   VkImageMemoryBarrier image_memory_barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
   image_memory_barrier.oldLayout = old_image_layout;
@@ -485,7 +523,8 @@ static void setupImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageAs
   vkCmdPipelineBarrier(cmdbuffer, src_stages, dest_stages, 0, 0, NULL, 0, NULL, 1, pmemory_barrier);
 }
 
-SwapchainBuffers createSwapchainBuffers(const VulkanDevice *device, VkFormat format, VkCommandBuffer cmdbuffer, VkImage image) {
+SwapchainBuffers createSwapchainBuffers(const VulkanDevice *device, VkFormat format, VkCommandBuffer cmdbuffer,
+                                        VkImage image) {
 
   VkResult res;
   SwapchainBuffers buffer;
@@ -507,7 +546,8 @@ SwapchainBuffers createSwapchainBuffers(const VulkanDevice *device, VkFormat for
 
   buffer.image = image;
 
-  setupImageLayout(cmdbuffer, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+  setupImageLayout(cmdbuffer, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
   color_attachment_view.image = buffer.image;
 
@@ -567,7 +607,8 @@ VkRenderPass createRenderPass(VkDevice device, VkFormat color_format, VkFormat d
   assert(res == VK_SUCCESS);
   return render_pass;
 }
-FrameBuffers createFrameBuffers(const VulkanDevice *device, VkSurfaceKHR surface, VkQueue queue, int winWidth, int winHeight, VkSwapchainKHR oldSwapchain) {
+FrameBuffers createFrameBuffers(const VulkanDevice *device, VkSurfaceKHR surface, VkQueue queue, int winWidth,
+                                int winHeight, VkSwapchainKHR oldSwapchain) {
 
   VkResult res;
 
@@ -579,7 +620,7 @@ FrameBuffers createFrameBuffers(const VulkanDevice *device, VkSurfaceKHR surface
   VkCommandBuffer *setup_cmd_buffer = createCmdBuffer(device->device, device->commandPool, 1);
 
   const VkCommandBufferBeginInfo cmd_buf_info = {
-          VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
   vkBeginCommandBuffer(setup_cmd_buffer[0], &cmd_buf_info);
 
@@ -751,10 +792,12 @@ FrameBuffers createFrameBuffers(const VulkanDevice *device, VkSurfaceKHR surface
   VkSemaphoreCreateInfo presentCompleteSemaphoreCreateInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
   VkFenceCreateInfo fenceCreateInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
   for (i = 0; i < swapchain_image_count; i++) {
-    res = vkCreateSemaphore(device->device, &presentCompleteSemaphoreCreateInfo, NULL, &buffer.present_complete_semaphore[i]);
+    res = vkCreateSemaphore(device->device, &presentCompleteSemaphoreCreateInfo, NULL,
+                            &buffer.present_complete_semaphore[i]);
     assert(res == VK_SUCCESS);
 
-    res = vkCreateSemaphore(device->device, &presentCompleteSemaphoreCreateInfo, NULL, &buffer.render_complete_semaphore[i]);
+    res = vkCreateSemaphore(device->device, &presentCompleteSemaphoreCreateInfo, NULL,
+                            &buffer.render_complete_semaphore[i]);
     assert(res == VK_SUCCESS);
 
     res = vkCreateFence(device->device, &fenceCreateInfo, NULL, &buffer.flight_fence[i]);
