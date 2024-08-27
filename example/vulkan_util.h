@@ -229,11 +229,9 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   }
 
   uint32_t loader_version = VK_API_VERSION_1_0;
-  if (vkEnumerateInstanceVersion) {
-    uint32_t version;
-    if (vkEnumerateInstanceVersion(&version) == VK_SUCCESS)
-      loader_version = version;
-  }
+  uint32_t version;
+  if (vkEnumerateInstanceVersion(&version) == VK_SUCCESS)
+    loader_version = version;
   printf("Vulkan loader API version: %i.%i\n", VK_VERSION_MAJOR(loader_version), VK_VERSION_MINOR(loader_version));
 
   uint32_t extensions_count = 0;
