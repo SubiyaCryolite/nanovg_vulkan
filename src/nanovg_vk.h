@@ -212,7 +212,6 @@ typedef struct VKNVGcontext {
   VKNVGPipeline *currentPipeline;
 
   VkShaderModule fillFragShader;
-  VkShaderModule fillFragShaderAA;
   VkShaderModule fillVertShader;
   VkQueue queue;
 
@@ -763,9 +762,7 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   VkDescriptorSetLayout descLayout = vk->descLayout;
   VkShaderModule vert_shader = vk->fillVertShader;
   VkShaderModule frag_shader = vk->fillFragShader;
-  if (vk->flags & NVG_ANTIALIAS) {
-    frag_shader = vk->fillFragShaderAA;
-  }
+
 #ifdef __cplusplus
   VkVertexInputBindingDescription vi_bindings[1] = {{}};
 #else
@@ -874,9 +871,23 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   shaderStages[0].module = vert_shader;
   shaderStages[0].pName = "main";
 
+  uint32_t edgeAA = vk->flags & NVG_ANTIALIAS ? 1 : 0;
+
+  VkSpecializationMapEntry entry = {};
+  entry.offset = 0;
+  entry.constantID = 0;
+  entry.size = sizeof(edgeAA);
+
+  VkSpecializationInfo specializationInfo = {};
+  specializationInfo.mapEntryCount = 1;
+  specializationInfo.pMapEntries = &entry;
+  specializationInfo.dataSize = entry.size;
+  specializationInfo.pData = &edgeAA;
+
   shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   shaderStages[1].module = frag_shader;
   shaderStages[1].pName = "main";
+  shaderStages[1].pSpecializationInfo = &specializationInfo;
 
   VkGraphicsPipelineCreateInfo pipelineCreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
   pipelineCreateInfo.layout = pipelineLayout;
@@ -1341,13 +1352,9 @@ static int vknvg_renderCreate(void *uptr) {
   const uint32_t fillFragShader[] = {
 #include "shader/fill.frag.inc"
   };
-  const uint32_t fillFragShaderAA[] = {
-#include "shader/fill_edge_aa.frag.inc"
-  };
 
   vk->fillVertShader = vknvg_createShaderModule(device, fillVertShader, sizeof(fillVertShader), allocator);
   vk->fillFragShader = vknvg_createShaderModule(device, fillFragShader, sizeof(fillFragShader), allocator);
-  vk->fillFragShaderAA = vknvg_createShaderModule(device, fillFragShaderAA, sizeof(fillFragShaderAA), allocator);
   VkDeviceSize align = vk->gpuProperties.limits.minUniformBufferOffsetAlignment;
 
   vk->fragSize = (int) (sizeof(VKNVGfragUniforms) + align - sizeof(VKNVGfragUniforms) % align);
@@ -1824,7 +1831,6 @@ static void vknvg_renderDelete(void *uptr) {
 
   vkDestroyShaderModule(device, vk->fillVertShader, allocator);
   vkDestroyShaderModule(device, vk->fillFragShader, allocator);
-  vkDestroyShaderModule(device, vk->fillFragShaderAA, allocator);
 
   vkDestroyDescriptorPool(device, vk->descPool, allocator);
   vkDestroyDescriptorSetLayout(device, vk->descLayout, allocator);

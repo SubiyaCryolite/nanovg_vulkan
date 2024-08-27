@@ -1,20 +1,21 @@
 #version 450
 
+layout(constant_id = 0) const uint EDGE_AA = 0;
 layout(std140,binding = 0) uniform frag {
-		mat3 scissorMat;
-		mat3 paintMat;
-		vec4 innerCol;
-		vec4 outerCol;
-		vec2 scissorExt;
-		vec2 scissorScale;
-		vec2 extent;
-		float radius;
-		float feather;
-		float strokeMult;
-		float strokeThr;
-		int texType;
-		int type;
-	};
+	mat3 scissorMat;
+	mat3 paintMat;
+	vec4 innerCol;
+	vec4 outerCol;
+	vec2 scissorExt;
+	vec2 scissorScale;
+	vec2 extent;
+	float radius;
+	float feather;
+	float strokeMult;
+	float strokeThr;
+	int texType;
+	int type;
+};
 layout(binding = 1)uniform sampler2D tex;
 layout(location = 0) in vec2 ftcoord;
 layout(location = 1) in vec2 fpos;
@@ -39,9 +40,13 @@ float strokeMask() {
 }
 
 void main(void) {
-   vec4 result;
+	vec4 result;
 	float scissor = scissorMask(fpos);
 	float strokeAlpha = 1.0;
+	if(EDGE_AA == 1) {
+		strokeAlpha = strokeMask();
+		if (strokeAlpha < strokeThr) discard;
+	}
 	if (type == 0) {			// Gradient
 		// Calculate gradient color using box gradient
 		vec2 pt = (paintMat * vec3(fpos,1.0)).xy;
