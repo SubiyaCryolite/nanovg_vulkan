@@ -7,7 +7,8 @@ This repo is based on the amazing work done by [danilw](https://github.com/danil
 To extend and optimise the Vulkan 1.0 implementation of NanoVG. Specifically by doing the following:
 - [X] Optimising pipeline selection and creation via use of `VK_EXT_extended_dynamic_state` and `VK_EXT_extended_dynamic_state3`
 - [X] Using one fragment shader instance, set based on the `NVG_ANTIALIAS` flag
-- [X] Using Push constants in the Vertex Shader (unfortunately buffers in the Fragment shader are too large for 128bytes spec)
+- [X] Using Push constants in the Vertex Shader
+- [X] Optimizations to `vkCmdBindVertexBuffers` (call once per frame) and `vkCmdDraw` (user `firstVertex`)
 - [ ] Possibly supporting SSBOs for MDI
 
 ---
