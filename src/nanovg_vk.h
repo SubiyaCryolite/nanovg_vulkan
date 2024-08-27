@@ -158,6 +158,10 @@ typedef struct VkNvgDynamic {
   bool colorWriteMask;
 } VkNvgDynamic;
 
+typedef struct VkNvgVertexConstants {
+  float viewSize[2];
+} VkNvgVertexConstants;
+
 typedef struct VKNVGcontext {
   VKNVGCreateInfo createInfo;
 
@@ -179,7 +183,7 @@ typedef struct VKNVGcontext {
   int cpipelines;
   int npipelines;
 
-  float viewSize[2];
+  VkNvgVertexConstants vertexConstants;
 
   // Per frame buffers
   VKNVGcall *calls;
@@ -636,7 +640,7 @@ static VkDescriptorPool vknvg_createDescriptorPool(VkDevice device, uint32_t cou
 static VkPipelineLayout vknvg_createPipelineLayout(VKNVGcontext *vk, const VkAllocationCallbacks *allocator) {
   VkPushConstantRange pushConstantRange = {};
   pushConstantRange.offset = 0;
-  pushConstantRange.size = sizeof(vk->viewSize);
+  pushConstantRange.size = sizeof(vk->vertexConstants);
   pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
   VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -1522,8 +1526,8 @@ static int vknvg_renderGetTextureSize(void *uptr, int image, int *w, int *h) {
 }
 static void vknvg_renderViewport(void *uptr, float width, float height, float devicePixelRatio) {
   VKNVGcontext *vk = uptr;
-  vk->viewSize[0] = width;
-  vk->viewSize[1] = height;
+  vk->vertexConstants.viewSize[0] = width;
+  vk->vertexConstants.viewSize[1] = height;
 }
 static void vknvg_renderCancel(void *uptr) {
   VKNVGcontext *vk = uptr;
@@ -1553,7 +1557,7 @@ static void vknvg_renderFlush(void *uptr) {
     vknvg_UpdateBuffer(device, allocator, &vk->vertexBuffer[currentFrame], memoryProperties, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, flags, vk->verts, vk->nverts * sizeof(vk->verts[0]));
     vknvg_UpdateBuffer(device, allocator, &vk->fragUniformBuffer[currentFrame], memoryProperties, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, flags, vk->uniforms, vk->nuniforms * vk->fragSize);
 
-    vkCmdPushConstants(vk->createInfo.cmdBuffer[currentFrame], vk->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vk->viewSize), &vk->viewSize);
+    vkCmdPushConstants(vk->createInfo.cmdBuffer[currentFrame], vk->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vk->vertexConstants), &vk->vertexConstants);
 
     const VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(vk->createInfo.cmdBuffer[currentFrame], 0, 1, &vk->vertexBuffer[currentFrame].buffer, offsets);
