@@ -1081,16 +1081,9 @@ static void vknvg_setUniforms(VKNVGcontext *vk, VkDescriptorSet descSet, int uni
   VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
 
-  VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
-
+  VkWriteDescriptorSet writes[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
 
   uint32_t descriptorWriteCount = 0;
-#ifdef __cplusplus
-  VkDescriptorBufferInfo vertUniformBufferInfo = {};
-#else
-  VkDescriptorBufferInfo vertUniformBufferInfo = {0};
-#endif
-
 #ifdef __cplusplus
   VkDescriptorBufferInfo uniform_buffer_info = {};
 #else
@@ -1107,25 +1100,22 @@ static void vknvg_setUniforms(VKNVGcontext *vk, VkDescriptorSet descSet, int uni
   writes[descriptorWriteCount].dstBinding = 0;
   descriptorWriteCount++;
 
-  VkDescriptorImageInfo image_info;
-
-  VKNVGtexture *tex = NULL;
   if (image != 0) {
+    VKNVGtexture *tex = NULL;
     tex = vknvg_findTexture(vk, image);
-  } else {
-    tex = vknvg_findTexture(vk, 1);
+
+    VkDescriptorImageInfo image_info;
+    image_info.imageLayout = tex->imageLayout;
+    image_info.imageView = tex->view;
+    image_info.sampler = tex->sampler;
+
+    writes[descriptorWriteCount].dstSet = descSet;
+    writes[descriptorWriteCount].dstBinding = 1;
+    writes[descriptorWriteCount].descriptorCount = 1;
+    writes[descriptorWriteCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[descriptorWriteCount].pImageInfo = &image_info;
+    descriptorWriteCount++;
   }
-
-  image_info.imageLayout = tex->imageLayout;
-  image_info.imageView = tex->view;
-  image_info.sampler = tex->sampler;
-
-  writes[descriptorWriteCount].dstSet = descSet;
-  writes[descriptorWriteCount].dstBinding = 1;
-  writes[descriptorWriteCount].descriptorCount = 1;
-  writes[descriptorWriteCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  writes[descriptorWriteCount].pImageInfo = &image_info;
-  descriptorWriteCount++;
 
   if (descriptorWriteCount > 0) {
     vkUpdateDescriptorSets(device, descriptorWriteCount, writes, 0, nullptr);
@@ -1268,7 +1258,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_
     vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 1, &vk->uniformDescriptorSet1[descriptor_offset], 0, nullptr);
 
     for (int i = 0; i < npaths; ++i) {
-      vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1,  paths[i].strokeOffset, 0);
+      vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, paths[i].strokeOffset, 0);
     }
 
     // Fill stencil with 0, always
