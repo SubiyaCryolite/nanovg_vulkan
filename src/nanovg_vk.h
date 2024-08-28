@@ -1096,39 +1096,48 @@ static void vknvg_setUniforms(VKNVGcontext *vk, VkDescriptorSet descSet, int uni
   VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
 
-  vk->vertexConstants[currentFrame].uniformOffset = (uniformOffset / vk->fragSize);
+  bool useOffset = false;
+  vk->vertexConstants[currentFrame].uniformOffset = useOffset ? (uniformOffset / vk->fragSize) : 0;
   vkCmdPushConstants(vk->createInfo.cmdBuffer[currentFrame], vk->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkNvgVertexConstants), &vk->vertexConstants[currentFrame]);
 
   VkDescriptorBufferInfo fragment_buffer_info = {};
   fragment_buffer_info.buffer = vk->fragUniformBuffer[currentFrame].buffer;
-  fragment_buffer_info.offset = 0;
-  fragment_buffer_info.range = vk->nuniforms * vk->fragSize;
+  if (useOffset) {
+    fragment_buffer_info.offset = 0;
+    fragment_buffer_info.range = vk->nuniforms * vk->fragSize;
+  } else {
+    fragment_buffer_info.offset = uniformOffset;
+    fragment_buffer_info.range = sizeof(VKNVGfragUniforms);
+  }
 
   VkWriteDescriptorSet writeFragData = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-  writeFragData.dstSet = vk->uniformDescriptorSet1[currentFrame];
+  writeFragData.dstSet = useOffset ? vk->uniformDescriptorSet1[currentFrame] : descSet;
   writeFragData.descriptorCount = 1;
   writeFragData.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   writeFragData.pBufferInfo = &fragment_buffer_info;
   writeFragData.dstBinding = 0;
   vkUpdateDescriptorSets(device, 1, &writeFragData, 0, nullptr);
 
+
+  VKNVGtexture *tex = NULL;
   if (image != 0) {
-    VKNVGtexture *tex = NULL;
     tex = vknvg_findTexture(vk, image);
-
-    VkDescriptorImageInfo image_info;
-    image_info.imageLayout = tex->imageLayout;
-    image_info.imageView = tex->view;
-    image_info.sampler = tex->sampler;
-
-    VkWriteDescriptorSet write = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    write.dstSet = descSet;
-    write.dstBinding = 1;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.pImageInfo = &image_info;
-    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+  } else {
+    tex = vknvg_findTexture(vk, 1);
   }
+
+  VkDescriptorImageInfo image_info;
+  image_info.imageLayout = tex->imageLayout;
+  image_info.imageView = tex->view;
+  image_info.sampler = tex->sampler;
+
+  VkWriteDescriptorSet write = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  write.dstSet = descSet;
+  write.dstBinding = 1;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &image_info;
+  vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 }
 
 static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_offset) {
@@ -1583,7 +1592,7 @@ static void vknvg_renderFlush(void *uptr) {
       vk->cdescPool = vk->ncalls;
     }
 
-    //TODO Move write here
+    // TODO Move write here
 
     uint32_t descriptor_offset = vk->cdescPool * currentFrame; // ensure descriptor sets dont clash
     for (i = 0; i < vk->ncalls; i++) {
