@@ -602,24 +602,21 @@ static void vknvg_createDescriptorSetLayout(VkDevice device, const VkAllocationC
           0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr,
   };
   const VkDescriptorSetLayoutCreateInfo create_info_0 = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr, 0, 1, &binding_0};
+  NVGVK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &create_info_0, allocator, &layouts[0]));
 
   const VkDescriptorSetLayoutBinding binding_1 = {
           0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr,
   };
   const VkDescriptorSetLayoutCreateInfo create_info_1 = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr, 0, 1, &binding_1};
-
-
-  NVGVK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &create_info_0, allocator, &layouts[0]));
   NVGVK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &create_info_1, allocator, &layouts[1]));
-  NVGVK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &create_info_1, allocator, &layouts[2]));
 }
 
 static VkDescriptorPool vknvg_createDescriptorPool(VkDevice device, uint32_t count, const VkAllocationCallbacks *allocator) {
 
   const VkDescriptorPoolSize type_count[3] = {
-          {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2 * count},
+          {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 4 * count},
           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * count},
-          {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * count},
+          {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * count},
   };
   const VkDescriptorPoolCreateInfo descriptor_pool = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, nullptr, 0, count * 2, 3, type_count};
   VkDescriptorPool descPool;
@@ -633,7 +630,7 @@ static VkPipelineLayout vknvg_createPipelineLayout(VKNVGcontext *vk, const VkAll
   pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
   VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-  pipelineLayoutCreateInfo.setLayoutCount = 3;
+  pipelineLayoutCreateInfo.setLayoutCount = 2;
   pipelineLayoutCreateInfo.pSetLayouts = vk->descLayout;
   pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
   pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
@@ -1257,7 +1254,6 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_
     pipelineKey.stencilStroke = VKNVG_STENCIL_STROKE_CLEAR;
     vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
     vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
-    vknvg_setUniforms(vk, vk->uniformDescriptorSet2[descriptor_offset], call->uniformOffset, call->image);
     vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 2, sets, 0, nullptr);
 
     for (int i = 0; i < npaths; ++i) {
@@ -1552,7 +1548,11 @@ static void vknvg_renderFlush(void *uptr) {
 
     if (vk->ncalls > vk->cdescPool) {
       vkDestroyDescriptorPool(device, vk->descPool, allocator);
-      vk->descPool = vknvg_createDescriptorPool(device, vk->ncalls * vk->createInfo.swapchainImageCount, allocator);
+
+      uint32_t pool_totals = 0;
+      pool_totals+=vk->ncalls * vk->createInfo.swapchainImageCount; //uniform texture descriptors
+      pool_totals+= vk->createInfo.swapchainImageCount;//ssbo descriptors
+      vk->descPool = vknvg_createDescriptorPool(device, pool_totals, allocator);
 
       free(vk->uniformDescriptorSet);
       vk->uniformDescriptorSet = (VkDescriptorSet *) calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet));
@@ -1570,11 +1570,7 @@ static void vknvg_renderFlush(void *uptr) {
       VkDescriptorSetAllocateInfo alloc_info_1 = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, nullptr, vk->descPool, 1, &vk->descLayout[1]};
       for (i = 0; i < vk->ncalls * vk->createInfo.swapchainImageCount; i++) {
         NVGVK_CHECK_RESULT(vkAllocateDescriptorSets(device, &alloc_info_1, &vk->uniformDescriptorSet[i]))
-      }
-
-      VkDescriptorSetAllocateInfo alloc_info_2 = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, nullptr, vk->descPool, 1, &vk->descLayout[3]};
-      for (i = 0; i < vk->ncalls * vk->createInfo.swapchainImageCount; i++) {
-        NVGVK_CHECK_RESULT(vkAllocateDescriptorSets(device, &alloc_info_2, &vk->uniformDescriptorSet2[i]))
+        NVGVK_CHECK_RESULT(vkAllocateDescriptorSets(device, &alloc_info_1, &vk->uniformDescriptorSet2[i]))
       }
 
       vk->cdescPool = vk->ncalls;
@@ -1838,7 +1834,6 @@ static void vknvg_renderDelete(void *uptr) {
   vkDestroyDescriptorPool(device, vk->descPool, allocator);
   vkDestroyDescriptorSetLayout(device, vk->descLayout[0], allocator);
   vkDestroyDescriptorSetLayout(device, vk->descLayout[1], allocator);
-  vkDestroyDescriptorSetLayout(device, vk->descLayout[2], allocator);
   vkDestroyPipelineLayout(device, vk->pipelineLayout, allocator);
 
   for (int i = 0; i < vk->npipelines; i++) {
@@ -1891,7 +1886,7 @@ NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
   vk->createInfo = createInfo;
   vk->queue = queue;
 
-  vk->descLayout = (VkDescriptorSetLayout *) calloc(vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSetLayout));
+  vk->descLayout = (VkDescriptorSetLayout *) calloc(2, sizeof(VkDescriptorSetLayout));
   vk->vertexConstants = (VkNvgVertexConstants *) calloc(vk->createInfo.swapchainImageCount, sizeof(VkNvgVertexConstants));
 
   cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
