@@ -1082,8 +1082,9 @@ static void vknvg_setUniforms(VKNVGcontext *vk, VkDescriptorSet descSet, int uni
   VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
 
-  vk->vertexConstants[currentFrame].uniformOffset = (uniformOffset / vk->fragSize);
+  vk->vertexConstants[currentFrame].uniformOffset = uniformOffset/vk->fragSize;
   vkCmdPushConstants(vk->createInfo.cmdBuffer[currentFrame], vk->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkNvgVertexConstants), &vk->vertexConstants[currentFrame]);
+
 
   VKNVGtexture *tex = NULL;
   if (image != 0) {
@@ -1589,6 +1590,9 @@ static void vknvg_renderFlush(void *uptr) {
     write_frag_data.pBufferInfo = &buffer_info;
     write_frag_data.dstBinding = 0;
     vkUpdateDescriptorSets(device, 1, &write_frag_data, 0, nullptr);
+
+
+    vk->vertexConstants->uniformOffset=0;
 
     uint32_t descriptor_offset = vk->cdescPool * currentFrame; // ensure descriptor sets dont clash
     for (i = 0; i < vk->ncalls; i++) {
