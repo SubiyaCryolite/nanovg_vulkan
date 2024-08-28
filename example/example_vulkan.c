@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#undef VK_USE_PLATFORM_XCB_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -16,7 +17,7 @@
 #define DEMO_STENCIL_STROKES 1
 #endif
 #ifndef DEMO_VULKAN_VALIDATON_LAYER
-#define DEMO_VULKAN_VALIDATON_LAYER 0
+#define DEMO_VULKAN_VALIDATON_LAYER 1
 #endif
 
 #include "nanovg.h"

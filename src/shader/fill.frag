@@ -16,10 +16,10 @@ struct FragmentData {
     int texType;
     int type;
 };
-layout(std430, binding = 0) buffer FragmentBuffer {
+layout(std430, set = 0, binding = 0) readonly buffer FragmentBuffer {
     FragmentData data[];
 };
-layout(binding = 1)uniform sampler2D tex;
+layout(set = 1, binding = 0)uniform sampler2D tex;
 layout(location = 0) in vec2 ftcoord;
 layout(location = 1) in vec2 fpos;
 layout(location = 2) flat in uint fid;
