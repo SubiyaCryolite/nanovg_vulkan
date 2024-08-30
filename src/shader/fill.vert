@@ -2,14 +2,14 @@
 
 layout (push_constant) uniform VertexUniform {
     vec2 viewSize;
-    uint uniformOffset;
+    int uniformOffset;
 };
 
 layout (location = 0) in vec2 vertex;
 layout (location = 1) in vec2 tcoord;
 layout (location = 0) out vec2 ftcoord;
 layout (location = 1) out vec2 fpos;
-layout (location = 2) out uint fid;
+layout (location = 2) out int fid;
 void main(void) {
     ftcoord = tcoord;
     fpos = vertex;
