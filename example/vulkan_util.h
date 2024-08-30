@@ -54,72 +54,88 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   queue_info.pQueuePriorities = queuePriorities;
   queue_info.queueFamilyIndex = device->graphicsQueueFamilyIndex;
 
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures = {
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicStateFeatures = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features = {
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2Features = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3Features = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
-  VkPhysicalDevicePortabilitySubsetFeaturesKHR subset = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR};
+  VkPhysicalDevicePortabilitySubsetFeaturesKHR subsetFeaturesKhr = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR};
 
-  extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
-  extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
-  extendedDynamicState3Features.pNext = &subset;
+  dynamicStateFeatures.pNext = &dynamicState2Features;
+  dynamicState2Features.pNext = &dynamicState3Features;
+  dynamicState3Features.pNext = &subsetFeaturesKhr;
 
+  //Query what's available on our hardware
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
   physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
+  physicalDeviceFeatures2.pNext = &dynamicStateFeatures;
   vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures2);
 
+  //Begin enabling extensions that we plan on using
   bool enableDynamicState = false;
   bool enableDynamicState2 = false;
   bool enableDynamicState3 = false;
+  bool enableTriangleFans = false;
 
-  uint32_t count = 0;
+  uint32_t extensionCount = 0;
+  vkEnumerateDeviceExtensionProperties(gpu, NULL, &extensionCount, NULL);
+  VkExtensionProperties *extensions = calloc(extensionCount, sizeof(VkExtensionProperties));
+  vkEnumerateDeviceExtensionProperties(gpu, NULL, &extensionCount, extensions);
 
-  vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, NULL);
-  VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
-  vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
-
-  extendedDynamicStateFeatures.pNext = NULL;
-  extendedDynamicState2Features.pNext = NULL;
-  extendedDynamicState3Features.pNext = NULL;
-
-  for (uint32_t i = 0; i < count; i++) {
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicStateFeatures.extendedDynamicState) {
+  void *pNextChain[extensionCount];
+  uint32_t lastEnabledExtension = -1;
+  for (uint32_t i = 0; i < extensionCount; i++) {
+    bool enable = dynamicStateFeatures.extendedDynamicState;
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0 && enable) {
       enableDynamicState = true;
       enabledExtensionCount++;
+      dynamicStateFeatures.pNext = lastEnabledExtension == -1 ? NULL : pNextChain[lastEnabledExtension];
+      pNextChain[i] = &dynamicStateFeatures;
+      lastEnabledExtension = i;
     }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
+    enable = dynamicState2Features.extendedDynamicState2;
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, extensions[i].extensionName) == 0 && enable) {
       enableDynamicState2 = true;
       enabledExtensionCount++;
-      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
+      dynamicState2Features.pNext = lastEnabledExtension == -1 ? NULL : pNextChain[lastEnabledExtension];
+      pNextChain[i] = &dynamicState2Features;
+      lastEnabledExtension = i;
     }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
+    enable = dynamicState3Features.extendedDynamicState3ColorBlendEquation &&
+             dynamicState3Features.extendedDynamicState3ColorWriteMask;
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 && enable) {
       enableDynamicState3 = true;
       enabledExtensionCount++;
-      extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
-      extendedDynamicState3Features.pNext = &subset;
+      dynamicState3Features.pNext = lastEnabledExtension == -1 ? NULL : pNextChain[lastEnabledExtension];
+      pNextChain[i] = &dynamicState3Features;
+      lastEnabledExtension = i;
+    }
+    enable = subsetFeaturesKhr.triangleFans;
+    if (strcmp(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME, extensions[i].extensionName) == 0 && enable) {
+      enableTriangleFans = true;
+      enabledExtensionCount++;
+      subsetFeaturesKhr.pNext = lastEnabledExtension == -1 ? NULL : pNextChain[lastEnabledExtension];
+      pNextChain[i] = &subsetFeaturesKhr;
+      lastEnabledExtension = i;
     }
   }
   free(extensions);
 
   uint32_t i = 0;
-  enabledExtensionName[i] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+  enabledExtensionName[i++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
   if (enableDynamicState) {
-    i++;
-    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+    enabledExtensionName[i++] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
   }
   if (enableDynamicState2) {
-    i++;
-    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME;
+    enabledExtensionName[i++] = VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME;
   }
   if (enableDynamicState3) {
-    i++;
-    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+    enabledExtensionName[i++] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+  }
+  if (enableTriangleFans) {
+    enabledExtensionName[i++] = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
   }
 
   VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
@@ -128,8 +144,9 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = enabledExtensionName;
   deviceInfo.pEnabledFeatures = NULL;
-  if (enableDynamicState)
-    deviceInfo.pNext = &extendedDynamicStateFeatures;
+  if (enabledExtensionCount > 0) {
+    deviceInfo.pNext = &pNextChain[lastEnabledExtension];
+  }
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
   assert(res == VK_SUCCESS);
@@ -143,6 +160,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
 
   return device;
 }
+
 void destroyVulkanDevice(VulkanDevice *device) {
   free(device->queueFamilyProperties);
 
