@@ -60,12 +60,9 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
   VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3Features = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
-  VkPhysicalDevicePortabilitySubsetFeaturesKHR subsetFeaturesKhr = {
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR};
 
   dynamicStateFeatures.pNext = &dynamicState2Features;
   dynamicState2Features.pNext = &dynamicState3Features;
-  dynamicState3Features.pNext = &subsetFeaturesKhr;
 
   //Query what's available on our hardware
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
@@ -77,7 +74,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   bool enableDynamicState = false;
   bool enableDynamicState2 = false;
   bool enableDynamicState3 = false;
-  bool enableTriangleFans = false;
 
   uint32_t extensionCount = 0;
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &extensionCount, NULL);
@@ -112,14 +108,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
       pNextChain[i] = &dynamicState3Features;
       lastEnabledExtension = i;
     }
-    enable = subsetFeaturesKhr.triangleFans;
-    if (strcmp(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME, extensions[i].extensionName) == 0 && enable) {
-      enableTriangleFans = true;
-      enabledExtensionCount++;
-      subsetFeaturesKhr.pNext = lastEnabledExtension == -1 ? NULL : pNextChain[lastEnabledExtension];
-      pNextChain[i] = &subsetFeaturesKhr;
-      lastEnabledExtension = i;
-    }
   }
   free(extensions);
 
@@ -133,9 +121,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   }
   if (enableDynamicState3) {
     enabledExtensionName[i++] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
-  }
-  if (enableTriangleFans) {
-    enabledExtensionName[i++] = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
   }
 
   VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
