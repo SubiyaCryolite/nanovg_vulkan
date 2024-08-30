@@ -193,10 +193,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                                                     VkDebugUtilsMessageTypeFlagsEXT messageType,
                                                     const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                                                     void *pUserData) {
-  if (strcmp(pCallbackData->pMessageIdName, "VUID-vkCmdBindDescriptorSets-commandBuffer-recording")==0) {
-    printf("VUID-vkCmdBindDescriptorSets-commandBuffer-recording\n");
-    return VK_FALSE;
-  }
   printf("%s\n", pCallbackData->pMessage);
   return VK_FALSE;
 }
