@@ -12,10 +12,10 @@
 #include <vulkan/vulkan.h>
 
 #ifndef DEMO_ANTIALIAS
-#define DEMO_ANTIALIAS 0
+#define DEMO_ANTIALIAS 1
 #endif
 #ifndef DEMO_STENCIL_STROKES
-#define DEMO_STENCIL_STROKES 0
+#define DEMO_STENCIL_STROKES 1
 #endif
 #ifndef DEMO_VULKAN_VALIDATON_LAYER
 #define DEMO_VULKAN_VALIDATON_LAYER 0
