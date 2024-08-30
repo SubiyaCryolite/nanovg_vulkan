@@ -5,19 +5,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #undef VK_USE_PLATFORM_XCB_KHR
+#define VK_ENABLE_BETA_EXTENSIONS
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <vulkan/vulkan.h>
 
 #ifndef DEMO_ANTIALIAS
-#define DEMO_ANTIALIAS 1
+#define DEMO_ANTIALIAS 0
 #endif
 #ifndef DEMO_STENCIL_STROKES
-#define DEMO_STENCIL_STROKES 1
+#define DEMO_STENCIL_STROKES 0
 #endif
 #ifndef DEMO_VULKAN_VALIDATON_LAYER
-#define DEMO_VULKAN_VALIDATON_LAYER 1
+#define DEMO_VULKAN_VALIDATON_LAYER 0
 #endif
 
 #include "nanovg.h"
