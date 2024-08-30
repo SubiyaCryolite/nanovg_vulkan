@@ -624,7 +624,11 @@ static VkDescriptorPool vknvg_createDescriptorPool(VkDevice device, uint32_t cou
   return descPool;
 }
 static VkPipelineLayout vknvg_createPipelineLayout(VKNVGcontext *vk, const VkAllocationCallbacks *allocator) {
+#ifdef __cplusplus
   VkPushConstantRange pushConstantRange = {};
+#else
+  VkPushConstantRange pushConstantRange = {0};
+#endif
   pushConstantRange.offset = 0;
   pushConstantRange.size = sizeof(VkNvgVertexConstants);
   pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -859,12 +863,20 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
 
   uint32_t edgeAA = vk->flags & NVG_ANTIALIAS ? 1 : 0;
 
+#ifdef __cplusplus
   VkSpecializationMapEntry entry = {};
+#else
+  VkSpecializationMapEntry entry = {0};
+#endif
   entry.offset = 0;
   entry.constantID = 0;
   entry.size = sizeof(edgeAA);
 
+#ifdef __cplusplus
   VkSpecializationInfo specializationInfo = {};
+#else
+  VkSpecializationInfo specializationInfo = {0};
+#endif
   specializationInfo.mapEntryCount = 1;
   specializationInfo.pMapEntries = &entry;
   specializationInfo.dataSize = entry.size;
@@ -1576,8 +1588,11 @@ static void vknvg_renderFlush(void *uptr) {
       vk->cdescPool = vk->ncalls;
     }
 
-    // TODO Move write here
+#ifdef __cplusplus
     VkDescriptorBufferInfo buffer_info = {};
+#else
+    VkDescriptorBufferInfo buffer_info = {0};
+#endif
     buffer_info.buffer = vk->fragUniformBuffer[currentFrame].buffer;
     buffer_info.offset = 0;
     buffer_info.range = vk->nuniforms * vk->fragSize;

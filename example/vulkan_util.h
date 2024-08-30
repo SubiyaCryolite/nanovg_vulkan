@@ -60,11 +60,9 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
   VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
-  VkPhysicalDevicePortabilitySubsetFeaturesKHR subset = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR};
 
   extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
   extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
-  extendedDynamicState3Features.pNext = &subset;
 
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
   physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -102,7 +100,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
       enableDynamicState3 = true;
       enabledExtensionCount++;
       extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
-      extendedDynamicState3Features.pNext = &subset;
     }
   }
   free(extensions);
