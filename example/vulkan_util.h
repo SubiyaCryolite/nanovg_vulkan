@@ -273,7 +273,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   vkEnumerateInstanceLayerProperties(&layerCount, 0);
   VkLayerProperties *layerprop = malloc(sizeof(VkLayerProperties) * layerCount);
   vkEnumerateInstanceLayerProperties(&layerCount, layerprop);
-  printf("vkEnumerateInstanceLayerProperties:");
+  printf("vkEnumerateInstanceLayerProperties:\n");
   for (uint32_t i = 0; i < layerCount; ++i) {
     printf("%s\n", layerprop[i].layerName);
   }

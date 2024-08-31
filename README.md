@@ -10,7 +10,7 @@ For this library to be a Vulkan 1.0 compatible implementation of NanoVG, while u
 - [X] Using Push constants in the Vertex Shader
 - [X] Optimizations to `vkCmdBindVertexBuffers` (call once per frame) and `vkCmdDraw` (use `firstVertex`)
 - [X] Using SSBO for single write of fragment data, rendered using uniform offset via pushConstant
-- [ ] Use triangle fan if supported on hardware
+- [X] Optimise texture memory flags, opt for `VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT` and single call to `vkMapMemory`.
 ---
 
 # 2024 - Im archive this.

@@ -70,6 +70,8 @@ typedef struct VKNVGtexture {
   VkImageView view;
 
   VkDeviceMemory mem;
+  void *mappedMem;
+  bool mapped;
   int32_t width, height;
   int type; // enum NVGtexture
   int flags;
@@ -932,17 +934,18 @@ static int vknvg_UpdateTexture(VkDevice device, VKNVGtexture *tex, int dx, int d
   vkGetImageMemoryRequirements(device, tex->image, &mem_reqs);
   VkImageSubresource subres = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
   VkSubresourceLayout layout;
-  void *bindptr;
   /* Get the subresource layout so we know what the row pitch is */
   vkGetImageSubresourceLayout(device, tex->image, &subres, &layout);
-  NVGVK_CHECK_RESULT(vkMapMemory(device, tex->mem, 0, mem_reqs.size, 0, &bindptr));
+  if (!tex->mapped) {
+    NVGVK_CHECK_RESULT(vkMapMemory(device, tex->mem, 0, mem_reqs.size, 0, &tex->mappedMem));
+    tex->mapped = true;
+  }
   int comp_size = (tex->type == NVG_TEXTURE_RGBA) ? 4 : 1;
   for (int y = 0; y < h; ++y) {
     char *src = (char *) data + ((dy + y) * (tex->width * comp_size)) + dx;
-    char *dest = (char *) bindptr + ((dy + y) * layout.rowPitch) + dx;
+    char *dest = (char *) tex->mappedMem + ((dy + y) * layout.rowPitch) + dx;
     memcpy(dest, src, w * comp_size);
   }
-  vkUnmapMemory(device, tex->mem);
   return 1;
 }
 
@@ -1403,7 +1406,8 @@ static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int ima
 
   mem_alloc.allocationSize = mem_reqs.size;
 
-  VkResult res = vknvg_memory_type_from_properties(vk->memoryProperties, mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &mem_alloc.memoryTypeIndex);
+  VkFlags flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  VkResult res = vknvg_memory_type_from_properties(vk->memoryProperties, mem_reqs.memoryTypeBits, flags, &mem_alloc.memoryTypeIndex);
   assert(res == VK_SUCCESS);
 
   NVGVK_CHECK_RESULT(vkAllocateMemory(device, &mem_alloc, allocator, &mappableMemory));
@@ -1501,6 +1505,10 @@ static int vknvg_renderDeleteTexture(void *uptr, int image) {
 
   VKNVGtexture *tex = vknvg_findTexture(vk, image);
 
+  if (tex->mapped) {
+    vkUnmapMemory(vk->createInfo.device, tex->mem);
+    tex->mapped = false;
+  }
   return vknvg_deleteTexture(vk, tex);
 }
 static int vknvg_renderUpdateTexture(void *uptr, int image, int x, int y, int w, int h, const unsigned char *data) {
