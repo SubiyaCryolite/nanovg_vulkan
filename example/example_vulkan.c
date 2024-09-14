@@ -1,6 +1,5 @@
 // https://github.com/danilw/nanovg_vulkan
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,18 +50,17 @@ void prepareFrame(VkDevice device, VkCommandBuffer cmd_buffer, FrameBuffers *fb)
   VkResult res;
 
   // Get the index of the next available swapchain image:
-  res = vkAcquireNextImageKHR(device, fb->swap_chain, UINT64_MAX, fb->present_complete_semaphore[fb->current_frame], VK_NULL_HANDLE, &fb->current_buffer);
+  res = vkAcquireNextImageKHR(device, fb->swap_chain, UINT64_MAX, fb->present_complete_semaphore[fb->current_frame],
+                              VK_NULL_HANDLE, &fb->current_buffer);
 
   if (res == VK_ERROR_OUT_OF_DATE_KHR) {
     resize_event = true;
     res = 0;
     return;
   }
-  assert(res == VK_SUCCESS);
 
   const VkCommandBufferBeginInfo cmd_buf_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-  res = vkBeginCommandBuffer(cmd_buffer, &cmd_buf_info);
-  assert(res == VK_SUCCESS);
+  vkBeginCommandBuffer(cmd_buffer, &cmd_buf_info);
 
   VkClearValue clear_values[2];
   clear_values[0].color.float32[0] = 0.3f;
@@ -98,30 +96,33 @@ void prepareFrame(VkDevice device, VkCommandBuffer cmd_buffer, FrameBuffers *fb)
   VkRect2D scissor = rp_begin.renderArea;
   vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 }
-void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, FrameBuffers *fb) {
+
+void submitFrame(VkDevice device, VkQueue graphicsQueue, VkQueue presentQueue, VkCommandBuffer cmd_buffer,
+                 FrameBuffers *fb) {
   VkResult res;
 
   vkCmdEndRenderPass(cmd_buffer);
 
   VkImageMemoryBarrier image_barrier = {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-          .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          .dstAccessMask = 0,
-          .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = fb->swap_chain_buffers[fb->current_buffer].image,
-          .subresourceRange =
-                  {
-                          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                          .baseMipLevel = 0,
-                          .levelCount = 1,
-                          .baseArrayLayer = 0,
-                          .layerCount = 1,
-                  },
+    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    .dstAccessMask = 0,
+    .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .image = fb->swap_chain_buffers[fb->current_buffer].image,
+    .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
   };
-  vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &image_barrier);
+  vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                       0, 0, NULL, 0, NULL, 1, &image_barrier);
 
   vkEndCommandBuffer(cmd_buffer);
 
@@ -137,8 +138,7 @@ void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, Fra
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = &fb->render_complete_semaphore[fb->current_frame];
 
-  res = vkQueueSubmit(queue, 1, &submit_info, fb->flight_fence[fb->current_frame]);
-  assert(res == VK_SUCCESS);
+  vkQueueSubmit(presentQueue, 1, &submit_info, fb->flight_fence[fb->current_frame]);
 
   /* Now present the image in the window */
 
@@ -150,24 +150,21 @@ void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, Fra
   present.waitSemaphoreCount = 1;
   present.pWaitSemaphores = &fb->render_complete_semaphore[fb->current_frame];
 
-  res = vkQueuePresentKHR(queue, &present);
+  res = vkQueuePresentKHR(presentQueue, &present);
   if (res == VK_ERROR_OUT_OF_DATE_KHR) {
-    res = vkQueueWaitIdle(queue);
+    vkQueueWaitIdle(graphicsQueue);
+    vkQueueWaitIdle(presentQueue);
     resize_event = true;
     res = 0;
     return;
   }
-  assert(res == VK_SUCCESS);
 
   fb->current_frame = (fb->current_frame + 1) % fb->swapchain_image_count;
   fb->num_swaps++;
 
   if (fb->num_swaps >= fb->swapchain_image_count) {
-    res = vkWaitForFences(device, 1, &fb->flight_fence[fb->current_frame], true, UINT64_MAX);
-    assert(res == VK_SUCCESS);
-
-    res = vkResetFences(device, 1, &fb->flight_fence[fb->current_frame]);
-    assert(res == VK_SUCCESS);
+    vkWaitForFences(device, 1, &fb->flight_fence[fb->current_frame], true, UINT64_MAX);
+    vkResetFences(device, 1, &fb->flight_fence[fb->current_frame]);
   }
 }
 
@@ -271,14 +268,17 @@ int main() {
 
   printf("Using GPU device %lu\n", (unsigned long) idx);
 
-  VulkanDevice *device = createVulkanDevice(gpu[idx]);
+  VulkanDevice *device = createVulkanDevice(gpu[idx], surface);
 
   int winWidth, winHeight;
   glfwGetWindowSize(window, &winWidth, &winHeight);
 
-  VkQueue queue;
-  vkGetDeviceQueue(device->device, device->graphicsQueueFamilyIndex, 0, &queue);
-  FrameBuffers fb = createFrameBuffers(device, surface, queue, winWidth, winHeight, 0);
+  VkQueue executionQueue;
+  VkQueue presentQueue;
+  vkGetDeviceQueue(device->device, device->graphicsQueueFamilyIndex, 0, &executionQueue);
+  vkGetDeviceQueue(device->device, device->graphicsQueueFamilyIndex, 0, &presentQueue);
+
+  FrameBuffers fb = createFrameBuffers(device, surface, executionQueue, winWidth, winHeight, 0);
 
   VkCommandBuffer *cmd_buffer = createCmdBuffer(device->device, device->commandPool, fb.swapchain_image_count);
 
@@ -303,7 +303,7 @@ int main() {
   flags |= NVG_STENCIL_STROKES;
 #endif
 
-  NVGcontext *vg = nvgCreateVk(create_info, flags, queue);
+  NVGcontext *vg = nvgCreateVk(create_info, flags, executionQueue);
 
   DemoData data;
   PerfGraph fps; //, cpuGraph, gpuGraph;
@@ -324,8 +324,8 @@ int main() {
     if ((resize_event) || (winWidth != cwinWidth || winHeight != cwinHeight)) {
       winWidth = cwinWidth;
       winHeight = cwinHeight;
-      destroyFrameBuffers(device, &fb, queue);
-      fb = createFrameBuffers(device, surface, queue, winWidth, winHeight, 0);
+      destroyFrameBuffers(device, &fb, executionQueue);
+      fb = createFrameBuffers(device, surface, executionQueue, winWidth, winHeight, 0);
       resize_event = false;
     } else {
 
@@ -346,18 +346,18 @@ int main() {
 
       nvgEndFrame(vg);
 
-      submitFrame(device->device, queue, cmd_buffer[fb.current_frame], &fb);
+      submitFrame(device->device, executionQueue, presentQueue, cmd_buffer[fb.current_frame], &fb);
     }
     glfwPollEvents();
   }
 
-  res = vkQueueWaitIdle(queue);
-  assert(res == VK_SUCCESS);
+  vkQueueWaitIdle(executionQueue);
+  vkQueueWaitIdle(presentQueue);
 
   freeDemoData(vg, &data);
   nvgDeleteVk(vg);
 
-  destroyFrameBuffers(device, &fb, queue);
+  destroyFrameBuffers(device, &fb, executionQueue);
 
   destroyVulkanDevice(device);
 

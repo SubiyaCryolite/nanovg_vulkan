@@ -16,6 +16,7 @@ typedef struct VulkanDevice {
   uint32_t queueFamilyPropertiesCount;
 
   uint32_t graphicsQueueFamilyIndex;
+  uint32_t presentIndex;
 
   VkDevice device;
 
@@ -25,7 +26,7 @@ typedef struct VulkanDevice {
 uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
 const char *enabledExtensionName[64];
 
-VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
+VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
   VulkanDevice *device = malloc(sizeof(VulkanDevice));
   memset(device, 0, sizeof(VulkanDevice));
 
@@ -43,11 +44,21 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu) {
   assert(device->queueFamilyPropertiesCount >= 1);
 
   device->graphicsQueueFamilyIndex = UINT32_MAX;
+  device->presentIndex = UINT32_MAX;
   for (uint32_t i = 0; i < device->queueFamilyPropertiesCount; ++i) {
     if ((device->queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
       device->graphicsQueueFamilyIndex = i;
     }
+    VkBool32 presentSupport = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &presentSupport);
+    if (presentSupport) {
+      device->presentIndex = i;
+    }
+    if (device->presentIndex != UINT32_MAX && device->graphicsQueueFamilyIndex != UINT32_MAX) {
+      break;
+    }
   }
+
   float queuePriorities[1] = {0.0};
   VkDeviceQueueCreateInfo queue_info = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
   queue_info.queueCount = 1;
