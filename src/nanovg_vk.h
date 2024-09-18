@@ -1361,7 +1361,7 @@ static int vknvg_renderCreate(void *uptr) {
 }
 
 static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int imageFlags, const unsigned char *data) {
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+  VKNVGcontext *vk = uptr;
   VKNVGtexture *tex = vknvg_allocTexture(vk);
   if (!tex) {
     return 0;
@@ -1477,7 +1477,7 @@ static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int ima
     if (type == NVG_TEXTURE_RGBA)
       tx_format = 4;
     size_t texture_size = w * h * tx_format * sizeof(uint8_t);
-    uint8_t *generated_texture = (uint8_t *) malloc(texture_size);
+    uint8_t *generated_texture = malloc(texture_size);
     for (uint32_t i = 0; i < (uint32_t) w; ++i) {
       for (uint32_t j = 0; j < (uint32_t) h; ++j) {
         size_t pixel = (i + j * w) * tx_format * sizeof(uint8_t);
@@ -1501,7 +1501,7 @@ static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int ima
 }
 static int vknvg_renderDeleteTexture(void *uptr, int image) {
 
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+  VKNVGcontext *vk = uptr;
 
   VKNVGtexture *tex = vknvg_findTexture(vk, image);
 
@@ -1513,7 +1513,6 @@ static int vknvg_renderDeleteTexture(void *uptr, int image) {
 }
 static int vknvg_renderUpdateTexture(void *uptr, int image, int x, int y, int w, int h, const unsigned char *data) {
   VKNVGcontext *vk = uptr;
-
   VKNVGtexture *tex = vknvg_findTexture(vk, image);
   vknvg_UpdateTexture(vk->createInfo.device, tex, x, y, w, h, data);
   return 1;
@@ -1834,7 +1833,7 @@ error:
 
 static void vknvg_renderDelete(void *uptr) {
 
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+  VKNVGcontext *vk = uptr;
 
   VkDevice device = vk->createInfo.device;
   const VkAllocationCallbacks *allocator = vk->createInfo.allocator;
