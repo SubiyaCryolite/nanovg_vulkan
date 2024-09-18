@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#define VK_ENABLE_BETA_EXTENSIONS
+#undef VK_USE_PLATFORM_XCB_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -87,8 +87,8 @@ void prepareFrame(VkDevice device, VkCommandBuffer cmd_buffer, FrameBuffers *fb)
   VkViewport viewport;
   viewport.width = (float) fb->buffer_size.width;
   viewport.height = (float) fb->buffer_size.height;
-  viewport.minDepth = (float) 0.0f;
-  viewport.maxDepth = (float) 1.0f;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
   viewport.x = (float) rp_begin.renderArea.offset.x;
   viewport.y = (float) rp_begin.renderArea.offset.y;
   vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
@@ -102,28 +102,6 @@ void submitFrame(VkDevice device, VkQueue graphicsQueue, VkQueue presentQueue, V
   VkResult res;
 
   vkCmdEndRenderPass(cmd_buffer);
-
-  VkImageMemoryBarrier image_barrier = {
-    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-    .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    .dstAccessMask = 0,
-    .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-    .image = fb->swap_chain_buffers[fb->current_buffer].image,
-    .subresourceRange =
-      {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = 1,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-      },
-  };
-  vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                       0, 0, NULL, 0, NULL, 1, &image_barrier);
-
   vkEndCommandBuffer(cmd_buffer);
 
   VkPipelineStageFlags pipe_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -341,7 +319,7 @@ int main() {
       glfwGetCursorPos(window, &mx, &my);
 
       nvgBeginFrame(vg, (float) winWidth, (float) winHeight, pxRatio);
-      renderDemo(vg, (float) mx, (float) my, (float) winWidth, (float) winHeight, (float) t, blowup, &data);
+      renderDemo(vg, mx, my, (float) winWidth, (float) winHeight, t, blowup, &data);
       renderGraph(vg, 5, 5, &fps);
 
       nvgEndFrame(vg);

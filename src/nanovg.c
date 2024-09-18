@@ -2399,7 +2399,6 @@ static float nvg__getFontScale(NVGstate* state)
 static void nvg__flushTextTexture(NVGcontext* ctx)
 {
 	int dirty[4];
-
 	if (fonsValidateTexture(ctx->fs, dirty)) {
 		int fontImage = ctx->fontImages[ctx->fontImageIdx];
 		// Update texture
