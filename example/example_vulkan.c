@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#undef VK_USE_PLATFORM_XCB_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -102,6 +101,28 @@ void submitFrame(VkDevice device, VkQueue graphicsQueue, VkQueue presentQueue, V
   VkResult res;
 
   vkCmdEndRenderPass(cmd_buffer);
+
+  VkImageMemoryBarrier image_barrier = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    .dstAccessMask = 0,
+    .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .image = fb->swap_chain_buffers[fb->current_buffer].image,
+    .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
+  };
+  vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                       0, 0, NULL, 0, NULL, 1, &image_barrier);
+
   vkEndCommandBuffer(cmd_buffer);
 
   VkPipelineStageFlags pipe_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

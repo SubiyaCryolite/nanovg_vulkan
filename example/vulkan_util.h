@@ -505,8 +505,6 @@ static void setupImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageAs
 
   VkImageSubresourceRange subresourceRange = {aspectMask, 0, 1, 0, 1};
   image_memory_barrier.subresourceRange = subresourceRange;
-  VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-  VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
   if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
     /* Make sure anything that was copying from this image has completed */
@@ -525,16 +523,11 @@ static void setupImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageAs
     /* Make sure any Copy or CPU writes to image are flushed */
     image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
   }
-  if (new_image_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-    image_memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    image_memory_barrier.dstAccessMask = 0;
-    src_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dest_stages = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-  }
 
   VkImageMemoryBarrier *pmemory_barrier = &image_memory_barrier;
 
-
+  VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+  VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
   vkCmdPipelineBarrier(cmdbuffer, src_stages, dest_stages, 0, 0, NULL, 0, NULL, 1, pmemory_barrier);
 }
@@ -581,7 +574,7 @@ VkRenderPass createRenderPass(VkDevice device, VkFormat color_format, VkFormat d
   attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
   attachments[1].format = depth_format;
   attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -594,7 +587,7 @@ VkRenderPass createRenderPass(VkDevice device, VkFormat color_format, VkFormat d
 
   VkAttachmentReference color_reference = {0};
   color_reference.attachment = 0;
-  color_reference.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
   VkAttachmentReference depth_reference = {0};
   depth_reference.attachment = 1;
@@ -662,6 +655,7 @@ FrameBuffers createFrameBuffers(const VulkanDevice *device, VkSurfaceKHR surface
     colorSpace = surfFormats[0].colorSpace;
     free(surfFormats);
   }
+  colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
   // Check the surface capabilities and formats
   VkSurfaceCapabilitiesKHR surfCapabilities;
