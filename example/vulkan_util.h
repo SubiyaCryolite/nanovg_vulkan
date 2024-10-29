@@ -90,6 +90,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
   VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
 
+  physicalDeviceFeatures2.pNext = NULL;
   extendedDynamicStateFeatures.pNext = NULL;
   extendedDynamicState2Features.pNext = NULL;
   extendedDynamicState3Features.pNext = NULL;
@@ -99,17 +100,22 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
         extendedDynamicStateFeatures.extendedDynamicState) {
       enableDynamicState = true;
       enabledExtensionCount++;
-    }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
-      enableDynamicState2 = true;
-      enabledExtensionCount++;
-      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
+      physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
     }
     if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
         extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
+      enableDynamicState2 = true;
       enableDynamicState3 = true;
       enabledExtensionCount++;
+      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
+      extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
+    }
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
+        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
+      enableDynamicState2 = true;
+      enableDynamicState3 = true;
+      enabledExtensionCount++;
+      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
       extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
     }
   }
@@ -136,8 +142,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
   deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = enabledExtensionName;
   deviceInfo.pEnabledFeatures = NULL;
-  if (enableDynamicState)
-    deviceInfo.pNext = &extendedDynamicStateFeatures;
+  deviceInfo.pNext = &physicalDeviceFeatures2;
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
   assert(res == VK_SUCCESS);
