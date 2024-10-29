@@ -34,7 +34,7 @@ typedef struct VKNVGCreateInfo {
 #ifdef __cplusplus
 extern "C" {
 #endif
-void nvgDeleteVk(NVGcontext *ctx);
+static void nvgDeleteVk(NVGcontext *ctx);
 
 #ifdef __cplusplus
 }
@@ -216,6 +216,12 @@ typedef struct VKNVGcontext {
 
   VkNvgDynamic dynamicState;
 } VKNVGcontext;
+
+typedef struct VKNVDynamicSupport {
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT v1;
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT v2;
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT v3;
+} VKNVDynamicSupport;
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey);
 
@@ -819,17 +825,18 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   vp.viewportCount = 1;
   vp.scissorCount = 1;
 
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicState1 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+  VKNVDynamicSupport dynamicSupport = {};
+  dynamicSupport.v1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+  dynamicSupport.v2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+  dynamicSupport.v3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
 
-  dynamicState1.pNext = &dynamicState2;
-  dynamicState2.pNext = &dynamicState3;
-  dynamicState3.pNext = NULL;
+  dynamicSupport.v1.pNext = &dynamicSupport.v2;
+  dynamicSupport.v2.pNext = &dynamicSupport.v3;
+  dynamicSupport.v3.pNext = NULL;
 
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
   physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures2.pNext = &dynamicState1;
+  physicalDeviceFeatures2.pNext = &dynamicSupport.v1;
   vkGetPhysicalDeviceFeatures2(vk->createInfo.gpu, &physicalDeviceFeatures2);
 
 
@@ -842,21 +849,27 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   uint32_t NUM_DYNAMIC_STATES = 0;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_VIEWPORT;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_SCISSOR;
-  if (dynamicState1.extendedDynamicState) {
-    if (vk->gpuProperties.apiVersion >= VK_API_VERSION_1_3 || isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
+  if (dynamicSupport.v1.extendedDynamicState) {
+    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
       vk->dynamicState.extended = true;
       dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
       dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
       dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_OP;
     }
   }
-  if (dynamicState3.extendedDynamicState3ColorBlendEquation) {
+  if (dynamicSupport.v2.extendedDynamicState2) {
+    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
+      vk->dynamicState.colorBlendEquation = true;
+      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
+    }
+  }
+  if (dynamicSupport.v3.extendedDynamicState3ColorBlendEquation) {
     if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
       vk->dynamicState.colorBlendEquation = true;
       dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
     }
   }
-  if (dynamicState3.extendedDynamicState3ColorWriteMask) {
+  if (dynamicSupport.v3.extendedDynamicState3ColorWriteMask) {
     if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
       vk->dynamicState.colorWriteMask = true;
       dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
@@ -1948,7 +1961,7 @@ static void vknvg_renderDelete(void *uptr) {
   free(vk);
 }
 
-NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
+static NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
 
   NVGparams params;
   NVGcontext *ctx = nullptr;
@@ -2013,7 +2026,7 @@ error:
   return nullptr;
 }
 
-inline void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
+static void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey) {
   if (vk->dynamicState.extended) {

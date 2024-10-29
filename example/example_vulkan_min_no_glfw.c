@@ -275,7 +275,7 @@ void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, Fra
 }
 
 void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg, FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data) {
-  *device = createVulkanDevice(gpu);
+  *device = createVulkanDevice(gpu, *surface);
 
   vkGetDeviceQueue((*device)->device, (*device)->graphicsQueueFamilyIndex, 0, queue);
   *fb = createFrameBuffers((*device), *surface, *queue, winWidth, winHeight, 0);
