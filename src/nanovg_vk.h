@@ -1,5 +1,9 @@
 #pragma once
 
+#include <assert.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include "nanovg.h"
 
@@ -30,7 +34,6 @@ typedef struct VKNVGCreateInfo {
 #ifdef __cplusplus
 extern "C" {
 #endif
-NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue);
 void nvgDeleteVk(NVGcontext *ctx);
 
 #ifdef __cplusplus
@@ -328,11 +331,20 @@ extern PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask;
 #define vkCmdSetStencilOpEXT cmdSetStencilOp
 #define vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask
 
+
+#ifdef __cplusplus
+inline PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation = nullptr;
+inline PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology = nullptr;
+inline PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable = nullptr;
+inline PFN_vkCmdSetStencilOpEXT cmdSetStencilOp = nullptr;
+inline PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask = nullptr;
+#else
 PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation = NULL;
 PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology = NULL;
 PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable = NULL;
 PFN_vkCmdSetStencilOpEXT cmdSetStencilOp = NULL;
 PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask = NULL;
+#endif
 
 static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   VKNVGPipeline *ret = nullptr;
@@ -823,7 +835,12 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   physicalDeviceFeatures2.pNext = &dynamicState1;
   vkGetPhysicalDeviceFeatures2(vk->createInfo.gpu, &physicalDeviceFeatures2);
 
+
+#ifdef __cplusplus
+  auto dynamicStateEnables = static_cast<VkDynamicState *>(calloc(64, sizeof(VkDynamicState)));
+#else
   VkDynamicState *dynamicStateEnables = calloc(64, sizeof(VkDynamicState));
+#endif
 
   uint32_t NUM_DYNAMIC_STATES = 0;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_VIEWPORT;
@@ -1223,7 +1240,6 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call, uint32_t descrip
 }
 
 static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, uint32_t descriptor_offset) {
-  VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
   VkCommandBuffer cmdBuffer = vk->createInfo.cmdBuffer[currentFrame];
 
@@ -1305,7 +1321,6 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call, uint32_t descript
   if (call->triangleCount == 0) {
     return;
   }
-  VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
   VkCommandBuffer cmdBuffer = vk->createInfo.cmdBuffer[currentFrame];
 
@@ -1329,9 +1344,12 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call, uint32_t descript
 
 ///==================================================================================================================
 static int vknvg_renderCreate(void *uptr) {
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
+  VKNVGcontext *vk = uptr;
+#endif
   VkDevice device = vk->createInfo.device;
-  VkRenderPass renderpass = vk->createInfo.renderpass;
   const VkAllocationCallbacks *allocator = vk->createInfo.allocator;
 
   vkGetPhysicalDeviceMemoryProperties(vk->createInfo.gpu, &vk->memoryProperties);
@@ -1361,7 +1379,12 @@ static int vknvg_renderCreate(void *uptr) {
 }
 
 static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int imageFlags, const unsigned char *data) {
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
+
   VKNVGtexture *tex = vknvg_allocTexture(vk);
   if (!tex) {
     return 0;
@@ -1477,7 +1500,14 @@ static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int ima
     if (type == NVG_TEXTURE_RGBA)
       tx_format = 4;
     size_t texture_size = w * h * tx_format * sizeof(uint8_t);
+
+
+#ifdef __cplusplus
+    auto *generated_texture = static_cast<uint8_t *>(malloc(texture_size));
+#else
     uint8_t *generated_texture = malloc(texture_size);
+#endif
+
     for (uint32_t i = 0; i < (uint32_t) w; ++i) {
       for (uint32_t j = 0; j < (uint32_t) h; ++j) {
         size_t pixel = (i + j * w) * tx_format * sizeof(uint8_t);
@@ -1501,7 +1531,11 @@ static int vknvg_renderCreateTexture(void *uptr, int type, int w, int h, int ima
 }
 static int vknvg_renderDeleteTexture(void *uptr, int image) {
 
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
 
   VKNVGtexture *tex = vknvg_findTexture(vk, image);
 
@@ -1512,13 +1546,21 @@ static int vknvg_renderDeleteTexture(void *uptr, int image) {
   return vknvg_deleteTexture(vk, tex);
 }
 static int vknvg_renderUpdateTexture(void *uptr, int image, int x, int y, int w, int h, const unsigned char *data) {
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
   VKNVGtexture *tex = vknvg_findTexture(vk, image);
   vknvg_UpdateTexture(vk->createInfo.device, tex, x, y, w, h, data);
   return 1;
 }
 static int vknvg_renderGetTextureSize(void *uptr, int image, int *w, int *h) {
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
   VKNVGtexture *tex = vknvg_findTexture(vk, image);
   if (tex) {
     *w = tex->width;
@@ -1528,12 +1570,20 @@ static int vknvg_renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   return 0;
 }
 static void vknvg_renderViewport(void *uptr, float width, float height, float devicePixelRatio) {
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
   vk->vertexConstants.viewSize[0] = width;
   vk->vertexConstants.viewSize[1] = height;
 }
 static void vknvg_renderCancel(void *uptr) {
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
 
   vk->nverts = 0;
   vk->npaths = 0;
@@ -1542,7 +1592,11 @@ static void vknvg_renderCancel(void *uptr) {
 }
 
 static void vknvg_renderFlush(void *uptr) {
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
   VkDevice device = vk->createInfo.device;
   uint32_t currentFrame = *vk->createInfo.currentFrame;
   VkPhysicalDeviceMemoryProperties memoryProperties = vk->memoryProperties;
@@ -1633,8 +1687,11 @@ static void vknvg_renderFlush(void *uptr) {
   vk->nuniforms = 0;
 }
 static void vknvg_renderFill(void *uptr, NVGpaint *paint, NVGcompositeOperationState compositeOperation, NVGscissor *scissor, float fringe, const float *bounds, const NVGpath *paths, int npaths) {
-
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
+  VKNVGcontext *vk = uptr;
+#endif
   VKNVGcall *call = vknvg_allocCall(vk);
   NVGvertex *quad;
   VKNVGfragUniforms *frag;
@@ -1734,9 +1791,12 @@ error:
 }
 
 static void vknvg_renderStroke(void *uptr, NVGpaint *paint, NVGcompositeOperationState compositeOperation, NVGscissor *scissor, float fringe, float strokeWidth, const NVGpath *paths, int npaths) {
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
+  VKNVGcontext *vk = uptr;
+#endif
   VKNVGcall *call = vknvg_allocCall(vk);
-  int i, maxverts, offset;
 
   if (call == NULL)
     return;
@@ -1750,12 +1810,12 @@ static void vknvg_renderStroke(void *uptr, NVGpaint *paint, NVGcompositeOperatio
   call->compositOperation = compositeOperation;
 
   // Allocate vertices for all the paths.
-  maxverts = vknvg_maxVertCount(paths, npaths);
-  offset = vknvg_allocVerts(vk, maxverts);
+  int maxverts = vknvg_maxVertCount(paths, npaths);
+  int offset = vknvg_allocVerts(vk, maxverts);
   if (offset == -1)
     goto error;
 
-  for (i = 0; i < npaths; i++) {
+  for (int i = 0; i < npaths; i++) {
     VKNVGpath *copy = &vk->paths[call->pathOffset + i];
     const NVGpath *path = &paths[i];
     memset(copy, 0, sizeof(VKNVGpath));
@@ -1794,7 +1854,11 @@ error:
 }
 
 static void vknvg_renderTriangles(void *uptr, NVGpaint *paint, NVGcompositeOperationState compositeOperation, NVGscissor *scissor, const NVGvertex *verts, int nverts, float fringe) {
-  VKNVGcontext *vk = (VKNVGcontext *) uptr;
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
+  VKNVGcontext *vk = uptr;
+#endif
 
   VKNVGcall *call = vknvg_allocCall(vk);
   VKNVGfragUniforms *frag;
@@ -1833,7 +1897,11 @@ error:
 
 static void vknvg_renderDelete(void *uptr) {
 
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(uptr);
+#else
   VKNVGcontext *vk = uptr;
+#endif
 
   VkDevice device = vk->createInfo.device;
   const VkAllocationCallbacks *allocator = vk->createInfo.allocator;
@@ -1879,9 +1947,16 @@ static void vknvg_renderDelete(void *uptr) {
 }
 
 NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
+
   NVGparams params;
   NVGcontext *ctx = nullptr;
-  VKNVGcontext *vk = (VKNVGcontext *) malloc(sizeof(VKNVGcontext));
+
+#ifdef __cplusplus
+  auto *vk = static_cast<VKNVGcontext *>(malloc(sizeof(VKNVGcontext)));
+#else
+  VKNVGcontext *vk = malloc(sizeof(VKNVGcontext));
+#endif
+
   if (vk == nullptr)
     goto error;
   memset(vk, 0, sizeof(VKNVGcontext));
@@ -1906,13 +1981,22 @@ NVGcontext *nvgCreateVk(VKNVGCreateInfo createInfo, int flags, VkQueue queue) {
   vk->createInfo = createInfo;
   vk->queue = queue;
 
-  vk->descLayout = (VkDescriptorSetLayout *) calloc(2, sizeof(VkDescriptorSetLayout));
 
+#ifdef __cplusplus
+  vk->descLayout = static_cast<VkDescriptorSetLayout *>(calloc(2, sizeof(VkDescriptorSetLayout)));
+  cmdSetPrimitiveTopology = reinterpret_cast<PFN_vkCmdSetPrimitiveTopologyEXT>(vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT"));
+  cmdSetStencilTestEnable = reinterpret_cast<PFN_vkCmdSetStencilTestEnableEXT>(vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT"));
+  cmdSetStencilOp = reinterpret_cast<PFN_vkCmdSetStencilOpEXT>(vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT"));
+  cmdSetColorBlendEquation = reinterpret_cast<PFN_vkCmdSetColorBlendEquationEXT>(vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT"));
+  cmdSetColorWriteMask = reinterpret_cast<PFN_vkCmdSetColorWriteMaskEXT>(vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT"));
+#else
+  vk->descLayout = (VkDescriptorSetLayout *) calloc(2, sizeof(VkDescriptorSetLayout));
   cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
   cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT");
   cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT");
   cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT");
   cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT");
+#endif
 
   ctx = nvgCreateInternal(&params);
   if (ctx == nullptr)
@@ -1926,7 +2010,8 @@ error:
     nvgDeleteInternal(ctx);
   return nullptr;
 }
-void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
+
+inline void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey) {
   if (vk->dynamicState.extended) {
