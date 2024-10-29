@@ -1622,12 +1622,18 @@ static void vknvg_renderFlush(void *uptr) {
       vk->descPool = vknvg_createDescriptorPool(device, pool_totals, allocator);
 
       free(vk->uniformDescriptorSet);
-      vk->uniformDescriptorSet = (VkDescriptorSet *) calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet));
       free(vk->uniformDescriptorSet2);
-      vk->uniformDescriptorSet2 = (VkDescriptorSet *) calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet));
-
       free(vk->ssboDescriptorSet);
+
+#ifdef __cplusplus
+      vk->uniformDescriptorSet = static_cast<VkDescriptorSet *>(calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet)));
+      vk->uniformDescriptorSet2 = static_cast<VkDescriptorSet *>(calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet)));
+      vk->ssboDescriptorSet = static_cast<VkDescriptorSet *>(calloc(vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet)));
+#else
+      vk->uniformDescriptorSet = (VkDescriptorSet *) calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet));
+      vk->uniformDescriptorSet2 = (VkDescriptorSet *) calloc(vk->ncalls * vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet));
       vk->ssboDescriptorSet = (VkDescriptorSet *) calloc(vk->createInfo.swapchainImageCount, sizeof(VkDescriptorSet));
+#endif
 
       VkDescriptorSetAllocateInfo alloc_info_0 = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, nullptr, vk->descPool, 1, &vk->descLayout[0]};
       for (i = 0; i < vk->createInfo.swapchainImageCount; i++) {
@@ -1680,6 +1686,7 @@ static void vknvg_renderFlush(void *uptr) {
   vk->ncalls = 0;
   vk->nuniforms = 0;
 }
+
 static void vknvg_renderFill(void *uptr, NVGpaint *paint, NVGcompositeOperationState compositeOperation, NVGscissor *scissor, float fringe, const float *bounds, const NVGpath *paths, int npaths) {
 #ifdef __cplusplus
   auto *vk = static_cast<VKNVGcontext *>(uptr);
