@@ -27,7 +27,6 @@ typedef struct VkNvgExt {
 } VkNvgExt;
 
 typedef struct VKNVGCreateInfo {
-  VkNvgExt ext;
   VkPhysicalDevice gpu;
   VkDevice device;
   VkRenderPass renderpass;
@@ -35,6 +34,7 @@ typedef struct VKNVGCreateInfo {
   uint32_t swapchainImageCount;
   uint32_t *currentFrame;
   const VkAllocationCallbacks *allocator; // Allocator for vulkan. can be null
+  VkNvgExt ext;
 } VKNVGCreateInfo;
 #ifdef __cplusplus
 extern "C" {

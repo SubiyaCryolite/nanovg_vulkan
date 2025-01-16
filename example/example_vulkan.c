@@ -282,7 +282,7 @@ int main() {
 
   VkCommandBuffer *cmd_buffer = createCmdBuffer(device->device, device->commandPool, fb.swapchain_image_count);
 
-  VKNVGCreateInfo create_info = {{}, 0};
+  VKNVGCreateInfo create_info = {0};
   create_info.device = device->device;
   create_info.gpu = device->gpu;
   create_info.renderpass = fb.render_pass;
