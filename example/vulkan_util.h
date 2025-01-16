@@ -87,16 +87,15 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkN
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
 
   physicalDeviceFeatures2.pNext = NULL;
-  extendedDynamicStateFeatures.pNext = NULL;\
+  extendedDynamicStateFeatures.pNext = NULL;
   extendedDynamicState3Features.pNext = NULL;
 
   for (uint32_t i = 0; i < count; i++) {
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicStateFeatures.extendedDynamicState) {
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0) {
       enableDynamicState = true;
       enabledExtensionCount++;
       physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
-      ext->dynamicState = true;
+      ext->dynamicState = extendedDynamicStateFeatures.extendedDynamicState;
     }
     if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0) {
       enableDynamicState3 = true;

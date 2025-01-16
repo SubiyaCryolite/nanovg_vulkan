@@ -290,8 +290,9 @@ void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidt
   create_info.currentFrame = &fb->current_frame;
   /**
    * Query your hardware and enable these items as necessary. See usage inside `createVulkanDevice`
+   * Utilises the capabilities of your hardware based on enabled extensions, either implicit (API version) or explicit
    */
-  create_info.ext.dynamicState = extQuery.dynamicState; //Requires API_VERSION_1_3 on instance creation or for VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME to be supported and enabled
+  create_info.ext.dynamicState = extQuery.dynamicState;
   create_info.ext.colorBlendEquation = extQuery.colorBlendEquation;
   create_info.ext.colorWriteMask = extQuery.colorWriteMask;
 
