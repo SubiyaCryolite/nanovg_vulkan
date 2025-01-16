@@ -44,9 +44,8 @@
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
 #include <shellapi.h>
 #endif
-
+#undef VK_USE_PLATFORM_XCB_KHR
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-
 #elif defined(VK_USE_PLATFORM_XCB_KHR)
 #include <X11/Xlib-xcb.h>
 #include <X11/Xutil.h>
@@ -282,7 +281,7 @@ void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidt
   *fb = createFrameBuffers((*device), *surface, *queue, winWidth, winHeight, 0);
 
   (*cmd_buffer) = createCmdBuffer((*device)->device, (*device)->commandPool, fb->swapchain_image_count);
-  VKNVGCreateInfo create_info = {{}, 0};
+  VKNVGCreateInfo create_info = {0};
   create_info.device = (*device)->device;
   create_info.gpu = (*device)->gpu;
   create_info.renderpass = fb->render_pass;
