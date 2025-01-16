@@ -275,21 +275,26 @@ void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, Fra
 }
 
 void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg, FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data) {
-  *device = createVulkanDevice(gpu, *surface);
+  VkNvgExt extQuery = {};
+  *device = createVulkanDevice(gpu, *surface, &extQuery);
 
   vkGetDeviceQueue((*device)->device, (*device)->graphicsQueueFamilyIndex, 0, queue);
   *fb = createFrameBuffers((*device), *surface, *queue, winWidth, winHeight, 0);
 
   (*cmd_buffer) = createCmdBuffer((*device)->device, (*device)->commandPool, fb->swapchain_image_count);
-  VKNVGCreateInfo create_info = {0};
+  VKNVGCreateInfo create_info = {{}, 0};
   create_info.device = (*device)->device;
   create_info.gpu = (*device)->gpu;
   create_info.renderpass = fb->render_pass;
   create_info.cmdBuffer = (*cmd_buffer);
   create_info.swapchainImageCount = fb->swapchain_image_count;
   create_info.currentFrame = &fb->current_frame;
-  create_info.ppEnabledExtensionNames = enabledExtensionName;
-  create_info.enabledExtensionCount = enabledExtensionCount;
+  /**
+   * Query your hardware and enable these items as necessary. See usage inside `createVulkanDevice`
+   */
+  create_info.ext.dynamicState = extQuery.dynamicState; //Requires API_VERSION_1_3 on instance creation or for VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME to be supported and enabled
+  create_info.ext.colorBlendEquation = extQuery.colorBlendEquation;
+  create_info.ext.colorWriteMask = extQuery.colorWriteMask;
 
   int flags = 0;
 #ifndef NDEBUG

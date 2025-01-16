@@ -20,15 +20,20 @@ enum NVGcreateFlags {
   NVG_DEBUG = 1 << 2,
 };
 
+typedef struct VkNvgExt {
+  bool dynamicState; //Requires VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME
+  bool colorBlendEquation; //Requires VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME
+  bool colorWriteMask; //Requires VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME
+} VkNvgExt;
+
 typedef struct VKNVGCreateInfo {
+  VkNvgExt ext;
   VkPhysicalDevice gpu;
   VkDevice device;
   VkRenderPass renderpass;
   VkCommandBuffer *cmdBuffer;
   uint32_t swapchainImageCount;
   uint32_t *currentFrame;
-  uint32_t enabledExtensionCount;
-  const char *const *ppEnabledExtensionNames;
   const VkAllocationCallbacks *allocator; // Allocator for vulkan. can be null
 } VKNVGCreateInfo;
 #ifdef __cplusplus
@@ -149,12 +154,6 @@ typedef struct VKNVGPipeline {
   VkPipeline pipeline;
 } VKNVGPipeline;
 
-typedef struct VkNvgDynamic {
-  bool extended;
-  bool colorBlendEquation;
-  bool colorWriteMask;
-} VkNvgDynamic;
-
 typedef struct VkNvgVertexConstants {
   float viewSize[2];
   uint32_t uniformOffset;
@@ -214,14 +213,8 @@ typedef struct VKNVGcontext {
   VkShaderModule fillVertShader;
   VkQueue queue;
 
-  VkNvgDynamic dynamicState;
+  VkNvgExt ext;
 } VKNVGcontext;
-
-typedef struct VKNVDynamicSupport {
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT v1;
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT v2;
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT v3;
-} VKNVDynamicSupport;
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey);
 
@@ -365,7 +358,7 @@ static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   return ret;
 }
 static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk, const VKNVGCreatePipelineKey *a, const VKNVGCreatePipelineKey *b) {
-  if (!vk->dynamicState.extended) {
+  if (!vk->ext.dynamicState) {
     if (a->topology != b->topology) {
       return a->topology - b->topology;
     }
@@ -380,13 +373,13 @@ static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk, const VKNVGCreatePip
     }
   }
 
-  if (!vk->dynamicState.colorWriteMask) {
+  if (!vk->ext.colorWriteMask) {
     if (a->colorWriteMask != b->colorWriteMask) {
       return a->colorWriteMask - b->colorWriteMask;
     }
   }
 
-  if (!vk->dynamicState.colorBlendEquation) {
+  if (!vk->ext.colorBlendEquation) {
     if (a->edgeAA != b->edgeAA) {
       return a->edgeAA - b->edgeAA;
     }
@@ -753,15 +746,6 @@ static VkFlags vknvg_cullMode(VKNVGCreatePipelineKey *pipelinekey) {
   return VK_CULL_MODE_BACK_BIT;
 }
 
-static bool isExtensionEnabled(const VKNVGcontext *vk, const char *extensionName) {
-  for (uint32_t h = 0; h < vk->createInfo.enabledExtensionCount; h++) {
-    if (strcmp(vk->createInfo.ppEnabledExtensionNames[h], extensionName) == 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipelineKey *pipelinekey) {
   VkDevice device = vk->createInfo.device;
   VkPipelineLayout pipelineLayout = vk->pipelineLayout;
@@ -825,55 +809,28 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   vp.viewportCount = 1;
   vp.scissorCount = 1;
 
-  VKNVDynamicSupport dynamicSupport = {};
-  dynamicSupport.v1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
-  dynamicSupport.v2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
-  dynamicSupport.v3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
-
-  dynamicSupport.v1.pNext = &dynamicSupport.v2;
-  dynamicSupport.v2.pNext = &dynamicSupport.v3;
-  dynamicSupport.v3.pNext = NULL;
-
-  VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
-  physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures2.pNext = &dynamicSupport.v1;
-  vkGetPhysicalDeviceFeatures2(vk->createInfo.gpu, &physicalDeviceFeatures2);
-
-
 #ifdef __cplusplus
-  auto dynamicStateEnables = static_cast<VkDynamicState *>(calloc(64, sizeof(VkDynamicState)));
+  auto dynamicStateEnables = static_cast<VkDynamicState *>(calloc(16, sizeof(VkDynamicState)));
 #else
-  VkDynamicState *dynamicStateEnables = calloc(64, sizeof(VkDynamicState));
+  VkDynamicState *dynamicStateEnables = calloc(16, sizeof(VkDynamicState));
 #endif
 
   uint32_t NUM_DYNAMIC_STATES = 0;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_VIEWPORT;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_SCISSOR;
-  if (dynamicSupport.v1.extendedDynamicState) {
-    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
-      vk->dynamicState.extended = true;
-      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
-      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
-      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_OP;
-    }
+  if (vk->createInfo.ext.dynamicState) {
+    vk->ext.dynamicState = true;
+    dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+    dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
+    dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_OP;
   }
-  if (dynamicSupport.v2.extendedDynamicState2) {
-    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
-      vk->dynamicState.colorBlendEquation = true;
-      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
-    }
+  if (vk->createInfo.ext.colorBlendEquation) {
+    vk->ext.colorBlendEquation = true;
+    dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
   }
-  if (dynamicSupport.v3.extendedDynamicState3ColorBlendEquation) {
-    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
-      vk->dynamicState.colorBlendEquation = true;
-      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
-    }
-  }
-  if (dynamicSupport.v3.extendedDynamicState3ColorWriteMask) {
-    if (isExtensionEnabled(vk, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
-      vk->dynamicState.colorWriteMask = true;
-      dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
-    }
+  if (vk->createInfo.ext.colorWriteMask) {
+    vk->ext.colorWriteMask = true;
+    dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
   }
 
   VkPipelineDynamicStateCreateInfo dynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
@@ -2029,13 +1986,13 @@ error:
 static void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey) {
-  if (vk->dynamicState.extended) {
+  if (vk->ext.dynamicState) {
     vkCmdSetPrimitiveTopologyEXT(cmd, pipelineKey->topology);
   }
-  if (vk->dynamicState.colorWriteMask) {
+  if (vk->ext.colorWriteMask) {
     vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &pipelineKey->colorWriteMask);
   }
-  if (vk->dynamicState.colorBlendEquation) {
+  if (vk->ext.colorBlendEquation) {
     VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
 #ifdef __cplusplus
     VkColorBlendEquationEXT colorBlendEquation = {};
@@ -2050,8 +2007,7 @@ static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const V
     colorBlendEquation.alphaBlendOp = colorBlendAttachment.alphaBlendOp;
     vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &colorBlendEquation);
   }
-
-  if (vk->dynamicState.extended) {
+  if (vk->ext.dynamicState) {
     VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
     vkCmdSetStencilTestEnableEXT(cmd, ds.stencilTestEnable);
     if (ds.stencilTestEnable) {

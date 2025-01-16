@@ -24,9 +24,9 @@ typedef struct VulkanDevice {
 } VulkanDevice;
 
 uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
-const char *enabledExtensionName[64];
+const char *enabledExtensionName[16];
 
-VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
+VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkNvgExt *ext) {
   VulkanDevice *device = malloc(sizeof(VulkanDevice));
   memset(device, 0, sizeof(VulkanDevice));
 
@@ -67,13 +67,10 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
 
   VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features = {
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
   VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
 
-  extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
-  extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
+  extendedDynamicStateFeatures.pNext = &extendedDynamicState3Features;
 
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
   physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -81,7 +78,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
   vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures2);
 
   bool enableDynamicState = false;
-  bool enableDynamicState2 = false;
   bool enableDynamicState3 = false;
 
   uint32_t count = 0;
@@ -91,8 +87,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
   vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
 
   physicalDeviceFeatures2.pNext = NULL;
-  extendedDynamicStateFeatures.pNext = NULL;
-  extendedDynamicState2Features.pNext = NULL;
+  extendedDynamicStateFeatures.pNext = NULL;\
   extendedDynamicState3Features.pNext = NULL;
 
   for (uint32_t i = 0; i < count; i++) {
@@ -101,22 +96,14 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
       enableDynamicState = true;
       enabledExtensionCount++;
       physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
+      ext->dynamicState = true;
     }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
-      enableDynamicState2 = true;
+    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0) {
       enableDynamicState3 = true;
       enabledExtensionCount++;
-      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
-      extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
-    }
-    if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0 &&
-        extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation) {
-      enableDynamicState2 = true;
-      enableDynamicState3 = true;
-      enabledExtensionCount++;
-      extendedDynamicStateFeatures.pNext = &extendedDynamicState2Features;
-      extendedDynamicState2Features.pNext = &extendedDynamicState3Features;
+      extendedDynamicStateFeatures.pNext = &extendedDynamicState3Features;
+      ext->colorBlendEquation = extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation;
+      ext->colorWriteMask = extendedDynamicState3Features.extendedDynamicState3ColorWriteMask;
     }
   }
   free(extensions);
@@ -126,10 +113,6 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
   if (enableDynamicState) {
     i++;
     enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
-  }
-  if (enableDynamicState2) {
-    i++;
-    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME;
   }
   if (enableDynamicState3) {
     i++;
