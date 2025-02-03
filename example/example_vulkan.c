@@ -290,7 +290,8 @@ int main() {
   create_info.swapchainImageCount = fb.swapchain_image_count;
   create_info.currentFrame = &fb.current_frame;
   /**
-   * Query your hardware and enable these items as necessary. See usage inside `createVulkanDevice`
+   * Either explicitly set the following to false or query your hardware and enable these items as necessary.
+   * See usage inside `createVulkanDevice` for more info.
    * Utilises the capabilities of your hardware based on enabled extensions, either implicit (API version) or explicit
    */
   create_info.ext.dynamicState = extQuery.dynamicState;

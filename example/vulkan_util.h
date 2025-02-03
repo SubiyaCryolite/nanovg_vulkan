@@ -72,6 +72,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkN
 
   extendedDynamicStateFeatures.pNext = &extendedDynamicState3Features;
 
+  //Provided by VK_VERSION_1_1 or VK_KHR_get_physical_device_properties2/VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
   physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
