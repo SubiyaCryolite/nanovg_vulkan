@@ -6,8 +6,9 @@ This repo is based on the amazing work done by [danilw](https://github.com/danil
 
 For this library to be a Vulkan 1.0 compatible implementation of NanoVG, while using the full featureset of more capable hardware via optional extensions:
 
-- In Ubuntu 24.04 performance exceeds OpenGL 3 (RX 6800, R7 7700)
-- In Windows 11 performance is within 10% of OpenGL 3 (RX 6800, R7 7700)
+- Ubuntu 24.04.1 LTS. Vulkan = 2857 fps (0.35ms), OpenGL 3.2 = 2632 fps (0.38ms). [1]
+- Windows 11 2024H2. Vulkan = 2273 fps (0.44 ms), OpenGL 3.2 = 2500 fps (0.40 ms). [1]
+- MacOS X. Vulkan = 709 fps (1.41 ms), OpenGL 3.2 = 763 fps (1.31 ms). [2]
 - Optimising pipeline creation and selection via use of supported (and/or enabled) extensions. Specifically:
   - vkCmdSetColorBlendEquationEXT
   - vkCmdSetPrimitiveTopologyEXT
@@ -19,6 +20,11 @@ For this library to be a Vulkan 1.0 compatible implementation of NanoVG, while u
 - Optimizations to `vkCmdBindVertexBuffers` (call once per frame) and `vkCmdDraw` (use `firstVertex`)
 - Using SSBO for single write of fragment data, rendered using uniform offset via pushConstant
 - Optimise texture memory flags
+
+
+ - Notes
+   - [1] Tested on RX 6800, R7 7700, 32GB RAM.
+   - [2] Tested on M1 Macbook Pro
 
 ---
 

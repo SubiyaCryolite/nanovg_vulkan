@@ -44,7 +44,6 @@
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
 #include <shellapi.h>
 #endif
-#undef VK_USE_PLATFORM_XCB_KHR
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
 #elif defined(VK_USE_PLATFORM_XCB_KHR)
 #include <X11/Xlib-xcb.h>
