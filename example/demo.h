@@ -13,6 +13,9 @@ struct DemoData {
 };
 typedef struct DemoData DemoData;
 
+/* Fill `out` with a path to a file under the example resource directory. */
+int demoResourcePath(char* out, unsigned int outSize, const char* relative);
+
 int loadDemoData(NVGcontext* vg, DemoData* data);
 void freeDemoData(NVGcontext* vg, DemoData* data);
 void renderDemo(NVGcontext* vg, float mx, float my, float width, float height, float t, int blowup, DemoData* data);

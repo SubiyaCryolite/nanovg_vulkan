@@ -153,6 +153,7 @@ void init_win_params(struct app_os_window *os_window) {
 // ----------- nanovg Vulkan related functions
 
 bool resize_event = false;
+static VkNvgExt nvg_ext;
 
 void prepareFrame(VkDevice device, VkCommandBuffer cmd_buffer, FrameBuffers *fb) {
   VkResult res;
@@ -272,33 +273,10 @@ void submitFrame(VkDevice device, VkQueue queue, VkCommandBuffer cmd_buffer, Fra
   res = vkQueueWaitIdle(queue);
 }
 
-void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg, FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data) {
-  VkNvgExt extQuery = {};
-  *device = createVulkanDevice(gpu, *surface, &extQuery);
-
-  vkGetDeviceQueue((*device)->device, (*device)->graphicsQueueFamilyIndex, 0, queue);
-  *fb = createFrameBuffers((*device), *surface, *queue, winWidth, winHeight, 0);
-
-  (*cmd_buffer) = createCmdBuffer((*device)->device, (*device)->commandPool, fb->swapchain_image_count);
-  VKNVGCreateInfo create_info = {0};
-  create_info.device = (*device)->device;
-  create_info.gpu = (*device)->gpu;
-  create_info.renderpass = fb->render_pass;
-  create_info.cmdBuffer = (*cmd_buffer);
-  create_info.swapchainImageCount = fb->swapchain_image_count;
-  create_info.currentFrame = &fb->current_frame;
-  /**
-   * Either explicitly set the following to false or query your hardware and enable these items as necessary.
-   * See usage inside `createVulkanDevice` for more info.
-   * Utilises the capabilities of your hardware based on enabled extensions, either implicit (API version) or explicit
-   */
-  create_info.ext.dynamicState = extQuery.dynamicState;
-  create_info.ext.colorBlendEquation = extQuery.colorBlendEquation;
-  create_info.ext.colorWriteMask = extQuery.colorWriteMask;
-
+static int nanovg_demo_flags(void) {
   int flags = 0;
 #ifndef NDEBUG
-  flags |= NVG_DEBUG; // unused in nanovg_vk
+  flags |= NVG_DEBUG;
 #endif
 #if DEMO_ANTIALIAS
   flags |= NVG_ANTIALIAS;
@@ -306,11 +284,39 @@ void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidt
 #if DEMO_STENCIL_STROKES
   flags |= NVG_STENCIL_STROKES;
 #endif
+  return flags;
+}
 
-  *vg = nvgCreateVk(create_info, flags, *queue);
-
-  if (loadDemoData(*vg, data) == -1)
+static void rebind_nanovg_after_swapchain(VulkanDevice *dev, VkQueue q, FrameBuffers *frame_buffers, VkCommandBuffer *cmds, NVGcontext **ctx, DemoData *demo, VkNvgExt ext) {
+  VKNVGCreateInfo create_info = {0};
+  create_info.device = dev->device;
+  create_info.gpu = dev->gpu;
+  create_info.renderpass = frame_buffers->render_pass;
+  create_info.cmdBuffer = cmds;
+  create_info.swapchainImageCount = frame_buffers->swapchain_image_count;
+  create_info.currentFrame = &frame_buffers->current_frame;
+  create_info.ext = ext;
+  if (*ctx != NULL) {
+    freeDemoData(*ctx, demo);
+    nvgDeleteVk(*ctx);
+    *ctx = NULL;
+  }
+  *ctx = nvgCreateVk(create_info, nanovg_demo_flags(), q);
+  if (loadDemoData(*ctx, demo) == -1)
     exit(-1);
+}
+
+void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg, FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data) {
+  VkNvgExt extQuery = {};
+  *device = createVulkanDevice(gpu, *surface, &extQuery);
+  nvg_ext = extQuery;
+
+  vkGetDeviceQueue((*device)->device, (*device)->graphicsQueueFamilyIndex, 0, queue);
+  *fb = createFrameBuffers((*device), *surface, *queue, winWidth, winHeight, 0);
+
+  (*cmd_buffer) = createCmdBuffer((*device)->device, (*device)->commandPool, fb->swapchain_image_count);
+  *vg = NULL;
+  rebind_nanovg_after_swapchain(*device, *queue, fb, *cmd_buffer, vg, data, nvg_ext);
 
   initGraph(fps, GRAPH_RENDER_FPS, "Frame Time");
 }
@@ -459,8 +465,10 @@ int main(int argc, char **argv) {
     if ((resize_event) || (winWidth != cwinWidth || winHeight != cwinHeight)) {
       winWidth = cwinWidth;
       winHeight = cwinHeight;
+      vkQueueWaitIdle(queue);
       destroyFrameBuffers(device, &fb, queue);
       fb = createFrameBuffers(device, surface, queue, winWidth, winHeight, 0);
+      rebind_nanovg_after_swapchain(device, queue, &fb, cmd_buffer, &vg, &data, nvg_ext);
       resize_event = false;
     } else {
 
@@ -752,8 +760,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
       int winWidth = os_window.app_data.iResolution[0];
       int winHeight = os_window.app_data.iResolution[1];
       if (resize_event) {
+        vkQueueWaitIdle(queue);
         destroyFrameBuffers(device, &fb, queue);
         fb = createFrameBuffers(device, surface, queue, winWidth, winHeight, 0);
+        rebind_nanovg_after_swapchain(device, queue, &fb, cmd_buffer, &vg, &data, nvg_ext);
         resize_event = false;
       } else {
         if (!os_window.is_minimized) {

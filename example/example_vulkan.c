@@ -330,8 +330,23 @@ int main() {
     if ((resize_event) || (winWidth != cwinWidth || winHeight != cwinHeight)) {
       winWidth = cwinWidth;
       winHeight = cwinHeight;
+      res = vkQueueWaitIdle(executionQueue);
+      assert(res == VK_SUCCESS);
+      /* NanoVG pipelines are bound to the old render pass. Recreate the context.
+         Demo images are NanoVG-owned (nvgCreateImage). For app-owned VkImages,
+         keep them and re-register with nvgCreateImageFromHandleVk instead of loadDemoData. */
+      freeDemoData(vg, &data);
+      nvgDeleteVk(vg);
+      vg = NULL;
       destroyFrameBuffers(device, &fb, executionQueue);
       fb = createFrameBuffers(device, surface, executionQueue, winWidth, winHeight, 0);
+      create_info.renderpass = fb.render_pass;
+      create_info.cmdBuffer = cmd_buffer;
+      create_info.swapchainImageCount = fb.swapchain_image_count;
+      create_info.currentFrame = &fb.current_frame;
+      vg = nvgCreateVk(create_info, flags, executionQueue);
+      if (loadDemoData(vg, &data) == -1)
+        return -1;
       resize_event = false;
     } else {
 
