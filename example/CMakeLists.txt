@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.16)
 
 project(nanovg_example)
 
@@ -28,6 +28,7 @@ option(DEMO_STENCIL_STROKES "NVG_STENCIL_STROKES" ON)
 add_compile_definitions(DEMO_MSAA=$<BOOL:${DEMO_MSAA}>)
 add_compile_definitions(DEMO_ANTIALIAS=$<BOOL:${DEMO_ANTIALIAS}>)
 add_compile_definitions(DEMO_STENCIL_STROKES=$<BOOL:${DEMO_STENCIL_STROKES}>)
+add_compile_definitions("DEMO_RESOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
 set(COMMON_INCLUDE ../src)
 

@@ -63,6 +63,24 @@ To launch - copy builded binary to _example_ folder(or launch when this folder i
 
 ---
 
+### Borrowed Vulkan images (`nvgCreateImageFromHandleVk`)
+
+NanoVG image ids are **owned by the `NVGcontext`**. `nvgDeleteVk` (and swapchain resize if you recreate the context) invalidates those ids.
+
+`nvgCreateImageFromHandleVk` registers an **application-owned** `VkImage` + `VkImageView` + `VkSampler`. NanoVG will **not** destroy those objects. Typical resize loop:
+
+1. Keep your `VkImage`s (and sampler) alive across resize.
+2. `nvgDeleteVk` / `nvgCreateVk` with the new render pass (or equivalent).
+3. Call `nvgCreateImageFromHandleVk` again to get **new** integer ids.
+
+`nvgDeleteImage` on a borrowed id only drops the NanoVG slot. You still `vkDestroy*` the GPU objects yourself when the app is done with them.
+
+`nvgDeleteVk` is safe if you never flushed a frame (`vertexBuffer` still null).
+
+The GLFW / no-GLFW samples recreate the NanoVG context after framebuffer resize and call `loadDemoData` again (they use `nvgCreateImage`, which NanoVG owns). Use handles when you do not want to re-upload pixels every resize.
+
+---
+
 ### Known bugs-related info:
 
 - **Bug** - **DPI scale is broken** when it `!=1`, Currectly - DPI scale set to 1 always. Read https://github.com/danilw/nanovg-vulkan-glfw-integration-demo/issues/1

@@ -810,6 +810,37 @@ void drawLines(NVGcontext* vg, float x, float y, float w, float h, float t)
 	nvgRestore(vg);
 }
 
+#ifndef DEMO_RESOURCE_DIR
+#define DEMO_RESOURCE_DIR "../example"
+#endif
+
+int demoResourcePath(char* out, unsigned int outSize, const char* relative)
+{
+	static const char* roots[] = {
+		DEMO_RESOURCE_DIR,
+		"../example",
+		".",
+		NULL
+	};
+	unsigned int i;
+
+	if (out == NULL || outSize == 0 || relative == NULL)
+		return -1;
+
+	for (i = 0; roots[i] != NULL; i++) {
+		FILE* fp;
+		snprintf(out, outSize, "%s/%s", roots[i], relative);
+		fp = fopen(out, "rb");
+		if (fp != NULL) {
+			fclose(fp);
+			return 0;
+		}
+	}
+
+	snprintf(out, outSize, "%s/%s", DEMO_RESOURCE_DIR, relative);
+	return -1;
+}
+
 int loadDemoData(NVGcontext* vg, DemoData* data)
 {
 	int i;
@@ -818,8 +849,10 @@ int loadDemoData(NVGcontext* vg, DemoData* data)
 		return -1;
 
 	for (i = 0; i < 12; i++) {
-		char file[128];
-		snprintf(file, 128, "../example/images/image%d.jpg", i+1);
+		char file[512];
+		char relative[64];
+		snprintf(relative, sizeof(relative), "images/image%d.jpg", i+1);
+		demoResourcePath(file, sizeof(file), relative);
 		data->images[i] = nvgCreateImage(vg, file, 0);
 		if (data->images[i] == 0) {
 			printf("Could not load %s.\n", file);
@@ -827,25 +860,32 @@ int loadDemoData(NVGcontext* vg, DemoData* data)
 		}
 	}
 
-	data->fontIcons = nvgCreateFont(vg, "icons", "../example/entypo.ttf");
-	if (data->fontIcons == -1) {
-		printf("Could not add font icons.\n");
-		return -1;
-	}
-	data->fontNormal = nvgCreateFont(vg, "sans", "../example/Roboto-Regular.ttf");
-	if (data->fontNormal == -1) {
-		printf("Could not add font italic.\n");
-		return -1;
-	}
-	data->fontBold = nvgCreateFont(vg, "sans-bold", "../example/Roboto-Bold.ttf");
-	if (data->fontBold == -1) {
-		printf("Could not add font bold.\n");
-		return -1;
-	}
-	data->fontEmoji = nvgCreateFont(vg, "emoji", "../example/NotoEmoji-Regular.ttf");
-	if (data->fontEmoji == -1) {
-		printf("Could not add font emoji.\n");
-		return -1;
+	{
+		char file[512];
+		demoResourcePath(file, sizeof(file), "entypo.ttf");
+		data->fontIcons = nvgCreateFont(vg, "icons", file);
+		if (data->fontIcons == -1) {
+			printf("Could not add font icons.\n");
+			return -1;
+		}
+		demoResourcePath(file, sizeof(file), "Roboto-Regular.ttf");
+		data->fontNormal = nvgCreateFont(vg, "sans", file);
+		if (data->fontNormal == -1) {
+			printf("Could not add font italic.\n");
+			return -1;
+		}
+		demoResourcePath(file, sizeof(file), "Roboto-Bold.ttf");
+		data->fontBold = nvgCreateFont(vg, "sans-bold", file);
+		if (data->fontBold == -1) {
+			printf("Could not add font bold.\n");
+			return -1;
+		}
+		demoResourcePath(file, sizeof(file), "NotoEmoji-Regular.ttf");
+		data->fontEmoji = nvgCreateFont(vg, "emoji", file);
+		if (data->fontEmoji == -1) {
+			printf("Could not add font emoji.\n");
+			return -1;
+		}
 	}
 	nvgAddFallbackFontId(vg, data->fontNormal, data->fontEmoji);
 	nvgAddFallbackFontId(vg, data->fontBold, data->fontEmoji);

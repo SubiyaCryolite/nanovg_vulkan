@@ -40,6 +40,9 @@ typedef struct VKNVGCreateInfo {
 extern "C" {
 #endif
 static void nvgDeleteVk(NVGcontext *ctx);
+// Bind an application-owned VkImage. NanoVG does not create or destroy image, view, sampler, or memory.
+// After nvgDeleteVk / nvgDeleteImage, those Vulkan objects remain valid so they can be rebound on a new context (e.g. swapchain resize).
+static int nvgCreateImageFromHandleVk(NVGcontext *ctx, VkImage image, VkImageView view, VkSampler sampler, VkImageLayout layout, int w, int h, int imageFlags);
 
 #ifdef __cplusplus
 }
@@ -81,6 +84,7 @@ typedef struct VKNVGtexture {
   int32_t width, height;
   int type; // enum NVGtexture
   int flags;
+  bool borrowed; // nvgCreateImageFromHandleVk — do not destroy Vulkan objects
 } VKNVGtexture;
 
 enum VKNVGcallType {
@@ -286,6 +290,10 @@ static int vknvg_deleteTexture(VKNVGcontext *vk, VKNVGtexture *tex) {
   VkDevice device = vk->createInfo.device;
   const VkAllocationCallbacks *allocator = vk->createInfo.allocator;
   if (tex) {
+    if (tex->borrowed) {
+      memset(tex, 0, sizeof(*tex));
+      return 1;
+    }
     if (tex->view != VK_NULL_HANDLE) {
       vkDestroyImageView(device, tex->view, allocator);
       tex->view = VK_NULL_HANDLE;
@@ -1884,9 +1892,11 @@ static void vknvg_renderDelete(void *uptr) {
     }
   }
 
-  for (int i = 0; i < vk->createInfo.swapchainImageCount; i++) {
-    vknvg_destroyBuffer(device, allocator, &vk->vertexBuffer[i]);
-    vknvg_destroyBuffer(device, allocator, &vk->fragUniformBuffer[i]);
+  if (vk->vertexBuffer != nullptr) {
+    for (int i = 0; i < vk->createInfo.swapchainImageCount; i++) {
+      vknvg_destroyBuffer(device, allocator, &vk->vertexBuffer[i]);
+      vknvg_destroyBuffer(device, allocator, &vk->fragUniformBuffer[i]);
+    }
   }
 
   vkDestroyShaderModule(device, vk->fillVertShader, allocator);
@@ -1981,6 +1991,31 @@ error:
   if (ctx != nullptr)
     nvgDeleteInternal(ctx);
   return nullptr;
+}
+
+static int nvgCreateImageFromHandleVk(NVGcontext *ctx, VkImage image, VkImageView view, VkSampler sampler, VkImageLayout layout, int w, int h, int imageFlags) {
+  if (ctx == nullptr || image == VK_NULL_HANDLE || view == VK_NULL_HANDLE || sampler == VK_NULL_HANDLE) {
+    return 0;
+  }
+  NVGparams *params = nvgInternalParams(ctx);
+  if (params == nullptr || params->userPtr == nullptr) {
+    return 0;
+  }
+  VKNVGcontext *vk = (VKNVGcontext *)params->userPtr;
+  VKNVGtexture *tex = vknvg_allocTexture(vk);
+  if (tex == nullptr) {
+    return 0;
+  }
+  tex->borrowed = true;
+  tex->image = image;
+  tex->view = view;
+  tex->sampler = sampler;
+  tex->imageLayout = layout;
+  tex->width = w;
+  tex->height = h;
+  tex->type = NVG_TEXTURE_RGBA;
+  tex->flags = imageFlags;
+  return vknvg_textureId(vk, tex);
 }
 
 static void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
