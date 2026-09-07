@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(nanovg_example)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 
 set (BUILD_SHARED_LIBS OFF)
@@ -57,7 +59,7 @@ if (BUILD_EXAMPLE_VULKAN)
     add_executable(
         example-vk
         ${COMMON_SRC}
-        ../src/nanovg_vk.h
+        ../src/nanovg_vk.c
         example_vulkan.c
         vulkan_util.h
     )
@@ -70,7 +72,7 @@ if (BUILD_EXAMPLE_VULKAN)
       add_executable(
           example-vk_min_no_glfw
           ${COMMON_SRC}
-          ../src/nanovg_vk.h
+          ../src/nanovg_vk.c
           example_vulkan_min_no_glfw.c
           vulkan_util.h
       )

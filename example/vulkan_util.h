@@ -1,6 +1,11 @@
 
 #pragma once
 
+#include <assert.h>
+#include <math.h>
+#include <stdbool.h>
+#include <string.h>
+
 #ifdef __APPLE__
 const bool isApplePlatform = true;
 #else

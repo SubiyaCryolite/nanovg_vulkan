@@ -304,7 +304,7 @@ static void rebind_nanovg_after_swapchain(VulkanDevice *dev, VkQueue q, FrameBuf
     nvgDeleteVk(*ctx);
     *ctx = NULL;
   }
-  *ctx = nvgCreateVk(create_info, nanovg_demo_flags(), q);
+  *ctx = nvgCreateVk(&create_info, nanovg_demo_flags(), q);
   if (loadDemoData(*ctx, demo) == -1)
     exit(-1);
 }
