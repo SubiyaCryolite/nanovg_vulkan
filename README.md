@@ -17,8 +17,12 @@ For this library to be a Vulkan 1.0 compatible implementation of NanoVG, while u
   - vkCmdSetColorWriteMaskEXT
 - Using one fragment shader instance, based on the `NVG_ANTIALIAS` flag (specialization constants)
 - Using Push constants in the Vertex Shader
-- Optimizations to `vkCmdBindVertexBuffers` (call once per frame) and `vkCmdDraw` (use `firstVertex`)
-- Using SSBO for single write of fragment data, rendered using uniform offset via pushConstant
+- Bind vertex buffer once per flush; `vkCmdDraw` uses `firstVertex`
+- Using SSBO for a single write of fragment uniforms, indexed via push constants (no per-draw UBO offset dance)
+- One texture descriptor set per call; extra stencil/AA uniforms are only a push-constant change
+- Per-frame `VKNVGFrame` (vertex + fragment SSBO), optional `frameCount` separate from swapchain image count
+- Texture layout transitions use a dedicated upload command buffer, not the in-flight render CB
+- Descriptor pools are retired instead of destroyed while other frames may still reference them
 - Optimise texture memory flags
 
 
@@ -75,7 +79,9 @@ NanoVG image ids are **owned by the `NVGcontext`**. `nvgDeleteVk` (and swapchain
 
 `nvgDeleteImage` on a borrowed id only drops the NanoVG slot. You still `vkDestroy*` the GPU objects yourself when the app is done with them.
 
-`nvgDeleteVk` is safe if you never flushed a frame (`vertexBuffer` still null).
+`nvgDeleteVk` is safe if you never flushed a frame (`frames` still null).
+
+`VKNVGCreateInfo.frameCount` is the in-flight GPU buffer count (`currentFrame` in `0 .. frameCount-1`). If it is `0`, `swapchainImageCount` is used. Pass `commandPool` (or `graphicsQueueFamilyIndex` so the library can create a pool) for `nvgCreateImage` layout transitions; those no longer record into the frame command buffer.
 
 The GLFW / no-GLFW samples recreate the NanoVG context after framebuffer resize and call `loadDemoData` again (they use `nvgCreateImage`, which NanoVG owns). Use handles when you do not want to re-upload pixels every resize.
 

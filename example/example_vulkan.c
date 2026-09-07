@@ -288,7 +288,10 @@ int main() {
   create_info.renderpass = fb.render_pass;
   create_info.cmdBuffer = cmd_buffer;
   create_info.swapchainImageCount = fb.swapchain_image_count;
+  create_info.frameCount = fb.swapchain_image_count;
   create_info.currentFrame = &fb.current_frame;
+  create_info.commandPool = device->commandPool;
+  create_info.graphicsQueueFamilyIndex = device->graphicsQueueFamilyIndex;
   /**
    * Either explicitly set the following to false or query your hardware and enable these items as necessary.
    * See usage inside `createVulkanDevice` for more info.
@@ -343,7 +346,10 @@ int main() {
       create_info.renderpass = fb.render_pass;
       create_info.cmdBuffer = cmd_buffer;
       create_info.swapchainImageCount = fb.swapchain_image_count;
+      create_info.frameCount = fb.swapchain_image_count;
       create_info.currentFrame = &fb.current_frame;
+      create_info.commandPool = device->commandPool;
+      create_info.graphicsQueueFamilyIndex = device->graphicsQueueFamilyIndex;
       vg = nvgCreateVk(create_info, flags, executionQueue);
       if (loadDemoData(vg, &data) == -1)
         return -1;
