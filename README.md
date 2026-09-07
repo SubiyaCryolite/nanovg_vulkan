@@ -67,23 +67,42 @@ To launch - copy builded binary to _example_ folder(or launch when this folder i
 
 ---
 
-### Borrowed Vulkan images (`nvgCreateImageFromHandleVk`)
+# Integration
 
-NanoVG image ids are **owned by the `NVGcontext`**. `nvgDeleteVk` (and swapchain resize if you recreate the context) invalidates those ids.
+Compile **`src/nanovg.c`** and **`src/nanovg_vk.c` as C11**. Include `nanovg.h` then `nanovg_vk.h` after `vulkan.h`. Do **not** `#define NANOVG_VULKAN_IMPLEMENTATION` into the Vulkan header (that define is only used by `example/demo.c` to skip GL). C++ hosts should keep `nanovg_vk.c` as a C translation unit; the header is `extern "C"`.
 
-`nvgCreateImageFromHandleVk` registers an **application-owned** `VkImage` + `VkImageView` + `VkSampler`. NanoVG will **not** destroy those objects. Typical resize loop:
+`nvgCreateVk` takes `const VKNVGCreateInfo *` and **copies** the struct. Pointers inside it must stay valid for the context lifetime:
 
-1. Keep your `VkImage`s (and sampler) alive across resize.
-2. `nvgDeleteVk` / `nvgCreateVk` with the new render pass (or equivalent).
-3. Call `nvgCreateImageFromHandleVk` again to get **new** integer ids.
+| Field | Role |
+| --- | --- |
+| `gpu`, `device`, `renderpass`, `queue` (create arg) | Device + the render pass NanoVG will record into |
+| `cmdBuffer` | Array of command buffers, length = in-flight count |
+| `currentFrame` | Pointer to the in-flight index (`0 .. frameCount-1`) |
+| `frameCount` | In-flight GPU buffers. `0` means use `swapchainImageCount` |
+| `commandPool` | One-shot texture uploads (`nvgCreateImage`). Prefer your graphics pool with `RESET_COMMAND_BUFFER` |
+| `graphicsQueueFamilyIndex` | Used only if `commandPool` is `VK_NULL_HANDLE` (`0` is a valid family) |
+| `ext` | Optional `VK_EXT_extended_dynamic_state` / `_3` bits; leave false if unused |
 
-`nvgDeleteImage` on a borrowed id only drops the NanoVG slot. You still `vkDestroy*` the GPU objects yourself when the app is done with them.
+Each frame: begin **your** render pass on `cmdBuffer[*currentFrame]`, then `nvgBeginFrame` / draw / `nvgEndFrame`. NanoVG records into that command buffer; it does not begin a second pass.
 
-`nvgDeleteVk` is safe if you never flushed a frame (`frames` still null).
+Pipelines are tied to `renderpass`. After swapchain resize, wait idle, `nvgDeleteVk`, `nvgCreateVk` with the new pass, then recreate fonts/images.
 
-`VKNVGCreateInfo.frameCount` is the in-flight GPU buffer count (`currentFrame` in `0 .. frameCount-1`). If it is `0`, `swapchainImageCount` is used. Pass `commandPool` (or `graphicsQueueFamilyIndex` so the library can create a pool) for `nvgCreateImage` layout transitions; those no longer record into the frame command buffer.
+`nvgDeleteVk` is safe if you never flushed (`frames` still null).
 
-The GLFW / no-GLFW samples recreate the NanoVG context after framebuffer resize and call `loadDemoData` again (they use `nvgCreateImage`, which NanoVG owns). Use handles when you do not want to re-upload pixels every resize.
+### Images
+
+- `nvgCreateImage` — NanoVG owns the `VkImage`. Fine for demos; the samples reload via `loadDemoData` after resize.
+- `nvgCreateImageFromHandleVk` — you own image, view, and sampler. NanoVG will not destroy them. Integer ids die with the context.
+
+Keep GPU images across resize, then re-register:
+
+1. Keep `VkImage` / view / sampler alive.
+2. `nvgDeleteVk` / `nvgCreateVk` with the new render pass.
+3. Call `nvgCreateImageFromHandleVk` again; store the **new** ids (do not assume id `1`).
+
+`nvgDeleteImage` on a borrowed id only drops the NanoVG slot.
+
+Working setup: `example/example_vulkan.c` (GLFW, multiple frames in flight) and `example/example_vulkan_min_no_glfw.c`.
 
 ---
 
@@ -112,6 +131,8 @@ cd ../
 ./build/example-vk_min_no_glfw
 ```
 
+CMake already compiles `src/nanovg_vk.c`. See **Integration** above for embedding in another project.
+
 Look _Examples description_ below there link to repository with _C only minimal example_ without dependencies not using any library.
 
 **MoltenVK note** - after `TOPOLOGY_TRIANGLE_LIST` update(look below) this Vulkan port does work on MoltenVK(Mac/etc) but I dont have it to test so you should make cmake config to build it and launch by yourself.
@@ -124,13 +145,15 @@ _Multiple frames in flight_ - _example_vulkan.c_ is multiple frames in flight ex
 
 ---
 
-**example_vulkan.c** - minimal NanoVG example that use GLFW.
+**example_vulkan.c** - GLFW sample: fills `VKNVGCreateInfo` (including `frameCount` and `commandPool`) and recreates the context on resize.
 
-**example_vulkan_min_no_glfw.c** - same as above but not using GLFW, supported Linux and Windows.
+**example_vulkan_min_no_glfw.c** - same NanoVG wiring without GLFW, Linux and Windows.
 
 ---
 
 ## Old examples, they not compatible with this latest nanovg_vulkan.
+
+Those linked demos still use the old header-only `nvgCreateVk(createInfo by value)` API. Prefer this repo’s samples plus **Integration** above.
 
 ### Two external examples:
 
@@ -193,7 +216,7 @@ In this PR:
 
 Thanks to [**@fzwoch**](https://github.com/fzwoch) [commits](https://github.com/danilw/nanovg_vulkan/pull/1) **by default used `TOPOLOGY_TRIANGLE_LIST`**, because `TOPOLOGY_TRIANGLE_FAN` is optional in Vulkan.
 
-To enable _TOPOLOGY_TRIANGLE_FAN_ edit `src/nanovg_vk.h` and set there `#define USE_TOPOLOGY_TRIANGLE_FAN`
+To enable _TOPOLOGY_TRIANGLE_FAN_ uncomment `#define USE_TOPOLOGY_TRIANGLE_FAN` in `src/nanovg_vk.c`.
 
 Depth order bug on AMD fix by [**@leranger**](https://github.com/leranger) [6ee1009](https://github.com/danilw/nanovg_vulkan/commit/6ee100956134cab2aab67a6a8a7a5bda54c0f9ab).
 

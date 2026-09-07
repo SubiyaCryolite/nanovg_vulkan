@@ -312,7 +312,7 @@ int main() {
   flags |= NVG_STENCIL_STROKES;
 #endif
 
-  NVGcontext *vg = nvgCreateVk(create_info, flags, executionQueue);
+  NVGcontext *vg = nvgCreateVk(&create_info, flags, executionQueue);
 
   DemoData data;
   PerfGraph fps; //, cpuGraph, gpuGraph;
@@ -350,7 +350,7 @@ int main() {
       create_info.currentFrame = &fb.current_frame;
       create_info.commandPool = device->commandPool;
       create_info.graphicsQueueFamilyIndex = device->graphicsQueueFamilyIndex;
-      vg = nvgCreateVk(create_info, flags, executionQueue);
+      vg = nvgCreateVk(&create_info, flags, executionQueue);
       if (loadDemoData(vg, &data) == -1)
         return -1;
       resize_event = false;
