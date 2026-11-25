@@ -199,7 +199,8 @@ int main() {
   enableValidationLayer = true;
 #endif
 
-  VkInstance instance = createVkInstance(enableValidationLayer);
+  uint32_t instanceApiVersion = VK_API_VERSION_1_0;
+  VkInstance instance = createVkInstance(enableValidationLayer, &instanceApiVersion);
 
   VkResult res;
   VkSurfaceKHR surface;
@@ -268,7 +269,7 @@ int main() {
   printf("Using GPU device %lu\n", (unsigned long) idx);
 
   VkNvgExt extQuery = {};
-  VulkanDevice *device = createVulkanDevice(gpu[idx], surface, &extQuery);
+  VulkanDevice *device = createVulkanDevice(instance, gpu[idx], surface, instanceApiVersion, &extQuery);
 
   int winWidth, winHeight;
   glfwGetWindowSize(window, &winWidth, &winHeight);

@@ -81,7 +81,7 @@ Compile **`src/nanovg.c`** and **`src/nanovg_vk.c` as C11**. Include `nanovg.h` 
 | `frameCount` | In-flight GPU buffers. `0` means use `swapchainImageCount` |
 | `commandPool` | One-shot texture uploads (`nvgCreateImage`). Prefer your graphics pool with `RESET_COMMAND_BUFFER` |
 | `graphicsQueueFamilyIndex` | Used only if `commandPool` is `VK_NULL_HANDLE` (`0` is a valid family) |
-| `ext` | Optional `VK_EXT_extended_dynamic_state` / `_3` bits; leave false if unused |
+| `ext` | Optional EDS1/EDS3 bits (or Vulkan 1.3 core dynamic state). Leave false if unused |
 
 Each frame: begin **your** render pass on `cmdBuffer[*currentFrame]`, then `nvgBeginFrame` / draw / `nvgEndFrame`. NanoVG records into that command buffer; it does not begin a second pass.
 

@@ -109,7 +109,7 @@ static void app_create_xcb_window(struct app_os_window *os_window);
 #endif
 
 struct app_os_window os_window;
-VkResult vk_init_ext(VkInstance *vk, const char *ext_names[], uint32_t ext_count);
+VkResult vk_init_ext(VkInstance *vk, const char *ext_names[], uint32_t ext_count, uint32_t *outApiVersion);
 VkResult vk_create_surface(VkInstance vk, VkSurfaceKHR *surface, struct app_os_window *os_window);
 VkPhysicalDevice init_vk_gpu(VkInstance instance, VkSurfaceKHR *surface);
 void update_params(struct app_data_struct *app_data, bool fps_lock);
@@ -309,9 +309,9 @@ static void rebind_nanovg_after_swapchain(VulkanDevice *dev, VkQueue q, FrameBuf
     exit(-1);
 }
 
-void init_nanovg_vulkan(VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg, FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data) {
+void init_nanovg_vulkan(VkInstance instance, uint32_t apiVersion, VkPhysicalDevice gpu, VkSurfaceKHR *surface, int winWidth, int winHeight, VkQueue *queue, NVGcontext **vg, FrameBuffers *fb, VkCommandBuffer **cmd_buffer, VulkanDevice **device, PerfGraph *fps, DemoData *data) {
   VkNvgExt extQuery = {};
-  *device = createVulkanDevice(gpu, *surface, &extQuery);
+  *device = createVulkanDevice(instance, gpu, *surface, apiVersion, &extQuery);
   nvg_ext = extQuery;
 
   vkGetDeviceQueue((*device)->device, (*device)->graphicsQueueFamilyIndex, 0, queue);
@@ -355,7 +355,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
           VK_KHR_SURFACE_EXTENSION_NAME,
           VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
   };
-  res = vk_init_ext(&instance, extension_names, sizeof extension_names / sizeof *extension_names);
+  uint32_t instanceApiVersion = VK_API_VERSION_1_0;
+  res = vk_init_ext(&instance, extension_names, sizeof extension_names / sizeof *extension_names, &instanceApiVersion);
 
   app_create_window(&os_window);
   res = vk_create_surface(instance, &surface, &os_window);
@@ -371,7 +372,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
   int winWidth = os_window.app_data.iResolution[0];
   int winHeight = os_window.app_data.iResolution[1];
-  init_nanovg_vulkan(gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data);
+  init_nanovg_vulkan(instance, instanceApiVersion, gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data);
 
   done = false;
   while (!done) {
@@ -417,7 +418,8 @@ int main(int argc, char **argv) {
           VK_KHR_XCB_SURFACE_EXTENSION_NAME,
 #endif
   };
-  res = vk_init_ext(&instance, extension_names, sizeof extension_names / sizeof *extension_names);
+  uint32_t instanceApiVersion = VK_API_VERSION_1_0;
+  res = vk_init_ext(&instance, extension_names, sizeof extension_names / sizeof *extension_names, &instanceApiVersion);
 
   printf("Init XCB\n");
   app_init_connection(&os_window);
@@ -446,7 +448,7 @@ int main(int argc, char **argv) {
   VkCommandBuffer *cmd_buffer;
   DemoData data;
   PerfGraph fps;
-  init_nanovg_vulkan(gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data);
+  init_nanovg_vulkan(instance, instanceApiVersion, gpu, &surface, winWidth, winHeight, &queue, &vg, &fb, &cmd_buffer, &device, &fps, &data);
 
   while (!os_window.app_data.quit) {
     xcb_generic_event_t *event;
@@ -537,22 +539,37 @@ void update_params(struct app_data_struct *app_data, bool fps_lock) {
 }
 
 
-VkResult vk_init_ext(VkInstance *vk, const char *ext_names[], uint32_t ext_count) {
+VkResult vk_init_ext(VkInstance *vk, const char *ext_names[], uint32_t ext_count, uint32_t *outApiVersion) {
+  uint32_t apiVersion = vulkanChooseInstanceApiVersion();
+  if (outApiVersion != NULL) {
+    *outApiVersion = apiVersion;
+  }
+
+  const char *names[16];
+  uint32_t count = 0;
+  for (uint32_t i = 0; i < ext_count && count < 15; i++) {
+    names[count++] = ext_names[i];
+  }
+  if (apiVersion < VK_API_VERSION_1_1 &&
+      vulkanInstanceExtensionPresent(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+    names[count++] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+  }
+
   VkApplicationInfo app_info = {
           .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
           .pApplicationName = "Nanovg demo",
           .applicationVersion = 0x010000,
           .pEngineName = "Nanovg demo",
           .engineVersion = 0x010000,
-          .apiVersion = VK_API_VERSION_1_0,
+          .apiVersion = apiVersion,
   };
   VkInstanceCreateInfo info;
 
   info = (VkInstanceCreateInfo){
           .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
           .pApplicationInfo = &app_info,
-          .enabledExtensionCount = ext_count,
-          .ppEnabledExtensionNames = ext_names,
+          .enabledExtensionCount = count,
+          .ppEnabledExtensionNames = names,
   };
 
   return vkCreateInstance(&info, NULL, vk);
