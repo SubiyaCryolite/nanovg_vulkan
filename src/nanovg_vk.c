@@ -56,7 +56,7 @@ typedef struct VKNVGcall {
   int pathCount;
   int triangleOffset;
   int triangleCount;
-  int uniformOffset;
+  int uniformIndex;
   NVGcompositeOperationState compositOperation;
 } VKNVGcall;
 
@@ -130,7 +130,6 @@ typedef struct VKNVGcontext {
   VkPhysicalDeviceProperties gpuProperties;
   VkPhysicalDeviceMemoryProperties memoryProperties;
 
-  int fragSize;
   int flags;
 
   // own resources
@@ -167,7 +166,7 @@ typedef struct VKNVGcontext {
 
   uint32_t cdescPool;
 
-  unsigned char *uniforms;
+  VKNVGfragUniforms *uniforms;
   int cuniforms;
   int nuniforms;
   VKNVGFrame *frames;
@@ -198,7 +197,7 @@ static uint32_t vknvg_frameCount(const VKNVGcontext *vk) {
 
 static uint32_t vknvg_frameIndex(const VKNVGcontext *vk) { return *vk->createInfo.currentFrame; }
 
-static VkCommandBuffer vknvg_cmd(const VKNVGcontext *vk) { return vk->createInfo.cmdBuffer[vknvg_frameIndex(vk)]; }
+static VkCommandBuffer vknvg_cmd(const VKNVGcontext *vk) { return vk->createInfo.cmdBuffers[vknvg_frameIndex(vk)]; }
 
 static VKNVGFrame *vknvg_frame(VKNVGcontext *vk) { return &vk->frames[vknvg_frameIndex(vk)]; }
 
@@ -778,8 +777,8 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   }};
   VkVertexInputAttributeDescription vi_attrs[2] = {
-      {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0},
-      {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 2 * sizeof(float)},
+      {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(NVGvertex, x)},
+      {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(NVGvertex, u)},
   };
 
   VkPipelineVertexInputStateCreateInfo vi = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
@@ -1036,15 +1035,15 @@ static int vknvg_allocVerts(VKNVGcontext *vk, int n) {
 }
 
 static int vknvg_allocFragUniforms(VKNVGcontext *vk, int n) {
-  int ret = 0, structSize = vk->fragSize;
-  if (!vknvg_growArray((void **)&vk->uniforms, &vk->cuniforms, vk->nuniforms + n, 128, (size_t)structSize)) {
+  int ret = 0;
+  if (!vknvg_growArray((void **)&vk->uniforms, &vk->cuniforms, vk->nuniforms + n, 128, sizeof *vk->uniforms)) {
     return -1;
   }
-  ret = vk->nuniforms * structSize;
+  ret = vk->nuniforms;
   vk->nuniforms += n;
   return ret;
 }
-static VKNVGfragUniforms *vknvg_fragUniformPtr(VKNVGcontext *vk, int i) { return (VKNVGfragUniforms *) &vk->uniforms[i]; }
+static VKNVGfragUniforms *vknvg_fragUniformPtr(VKNVGcontext *vk, int i) { return &vk->uniforms[i]; }
 
 static void vknvg_vset(NVGvertex *vtx, float x, float y, float u, float v) {
   vtx->x = x;
@@ -1053,8 +1052,8 @@ static void vknvg_vset(NVGvertex *vtx, float x, float y, float u, float v) {
   vtx->v = v;
 }
 
-static void vknvg_pushUniformOffset(VKNVGcontext *vk, int uniformOffset) {
-  vk->vertexConstants.uniformOffset = (uint32_t)(uniformOffset / vk->fragSize);
+static void vknvg_pushUniformIndex(VKNVGcontext *vk, int uniformIndex) {
+  vk->vertexConstants.uniformOffset = (uint32_t)uniformIndex;
   vkCmdPushConstants(vknvg_cmd(vk), vk->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkNvgVertexConstants), &vk->vertexConstants);
 }
 
@@ -1080,9 +1079,9 @@ static void vknvg_writeTextureSet(VKNVGcontext *vk, VkDescriptorSet descSet, int
   vkUpdateDescriptorSets(vk->createInfo.device, 1, &write, 0, NULL);
 }
 
-static void vknvg_bindCall(VKNVGcontext *vk, VkDescriptorSet texSet, int uniformOffset, int image) {
+static void vknvg_bindCall(VKNVGcontext *vk, VkDescriptorSet texSet, int uniformIndex, int image) {
   uint32_t currentFrame = vknvg_frameIndex(vk);
-  vknvg_pushUniformOffset(vk, uniformOffset);
+  vknvg_pushUniformIndex(vk, uniformIndex);
   vknvg_writeTextureSet(vk, texSet, image);
   VkDescriptorSet sets[2] = {vk->ssboDescriptorSet[currentFrame], texSet};
   vkCmdBindDescriptorSets(vknvg_cmd(vk), VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 0, 2, sets, 0, NULL);
@@ -1104,13 +1103,13 @@ static void vknvg_fill(VKNVGcontext *vk, VKNVGcall *call, VkDescriptorSet texSet
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
   vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
-  vknvg_bindCall(vk, texSet, call->uniformOffset, call->image);
+  vknvg_bindCall(vk, texSet, call->uniformIndex, call->image);
 
   for (int i = 0; i < npaths; i++) {
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, paths[i].fillOffset, 0);
   }
 
-  vknvg_pushUniformOffset(vk, call->uniformOffset + vk->fragSize);
+  vknvg_pushUniformIndex(vk, call->uniformIndex + 1);
 
   if (vk->flags & NVG_ANTIALIAS) {
 
@@ -1151,7 +1150,7 @@ static void vknvg_convexFill(VKNVGcontext *vk, VKNVGcall *call, VkDescriptorSet 
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
   vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
-  vknvg_bindCall(vk, texSet, call->uniformOffset, call->image);
+  vknvg_bindCall(vk, texSet, call->uniformIndex, call->image);
 
   for (int i = 0; i < npaths; ++i) {
     vkCmdDraw(cmdBuffer, paths[i].fillCount, 1, paths[i].fillOffset, 0);
@@ -1180,13 +1179,13 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, VkDescriptorSet texS
 
     vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
     vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
-    vknvg_bindCall(vk, texSet, call->uniformOffset + vk->fragSize, call->image);
+    vknvg_bindCall(vk, texSet, call->uniformIndex + 1, call->image);
 
     for (int i = 0; i < npaths; ++i) {
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, paths[i].strokeOffset, 0);
     }
 
-    vknvg_pushUniformOffset(vk, call->uniformOffset);
+    vknvg_pushUniformIndex(vk, call->uniformIndex);
     pipelineKey.stencilStroke = VKNVG_STENCIL_STROKE_DRAW_AA;
     vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
     vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
@@ -1212,7 +1211,7 @@ static void vknvg_stroke(VKNVGcontext *vk, VKNVGcall *call, VkDescriptorSet texS
 
     vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
     vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
-    vknvg_bindCall(vk, texSet, call->uniformOffset, call->image);
+    vknvg_bindCall(vk, texSet, call->uniformIndex, call->image);
 
     for (int i = 0; i < npaths; ++i) {
       vkCmdDraw(cmdBuffer, paths[i].strokeCount, 1, paths[i].strokeOffset, 0);
@@ -1233,7 +1232,7 @@ static void vknvg_triangles(VKNVGcontext *vk, VKNVGcall *call, VkDescriptorSet t
 
   vknvg_bindPipeline(vk, cmdBuffer, &pipelineKey);
   vknvg_setDynamicState(vk, cmdBuffer, &pipelineKey);
-  vknvg_bindCall(vk, texSet, call->uniformOffset, call->image);
+  vknvg_bindCall(vk, texSet, call->uniformIndex, call->image);
 
   vkCmdDraw(cmdBuffer, call->triangleCount, 1, call->triangleOffset, 0);
 }
@@ -1257,7 +1256,6 @@ static int vknvg_renderCreate(void *uptr) {
 
   vk->fillVertShader = vknvg_createShaderModule(device, fillVertShader, sizeof(fillVertShader), allocator);
   vk->fillFragShader = vknvg_createShaderModule(device, fillFragShader, sizeof(fillFragShader), allocator);
-  vk->fragSize = (int)sizeof(VKNVGfragUniforms);
 
   vknvg_createDescriptorSetLayout(device, allocator, vk->descLayout);
   vk->pipelineLayout = vknvg_createPipelineLayout(vk, allocator);
@@ -1469,7 +1467,7 @@ static void vknvg_renderFlush(void *uptr) {
     VKNVGFrame *frame = vknvg_frame(vk);
     const VkFlags flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     vknvg_UpdateBuffer(device, allocator, &frame->vertex, memoryProperties, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, flags, vk->verts, vk->nverts * sizeof(vk->verts[0]));
-    vknvg_UpdateBuffer(device, allocator, &frame->fragUniform, memoryProperties, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, flags, vk->uniforms, vk->nuniforms * vk->fragSize);
+    vknvg_UpdateBuffer(device, allocator, &frame->fragUniform, memoryProperties, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, flags, vk->uniforms, vk->nuniforms * sizeof *vk->uniforms);
 
     const VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(vknvg_cmd(vk), 0, 1, &frame->vertex.buffer, offsets);
@@ -1505,7 +1503,7 @@ static void vknvg_renderFlush(void *uptr) {
     VkDescriptorBufferInfo buffer_info = {
         .buffer = frame->fragUniform.buffer,
         .offset = 0,
-        .range = vk->nuniforms * vk->fragSize,
+        .range = vk->nuniforms * sizeof *vk->uniforms,
     };
     VkWriteDescriptorSet write_frag_data = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1611,22 +1609,22 @@ static void vknvg_renderFill(void *uptr, NVGpaint *paint, NVGcompositeOperationS
     vknvg_vset(&quad[2], bounds[0], bounds[3], 0.5f, 1.0f);
     vknvg_vset(&quad[3], bounds[0], bounds[1], 0.5f, 1.0f);
 
-    call->uniformOffset = vknvg_allocFragUniforms(vk, 2);
-    if (call->uniformOffset == -1)
+    call->uniformIndex = vknvg_allocFragUniforms(vk, 2);
+    if (call->uniformIndex == -1)
       goto error;
     // Simple shader for stencil
-    frag = vknvg_fragUniformPtr(vk, call->uniformOffset);
+    frag = vknvg_fragUniformPtr(vk, call->uniformIndex);
     memset(frag, 0, sizeof(*frag));
     frag->strokeThr = -1.0f;
     frag->type = NSVG_SHADER_SIMPLE;
     // Fill shader
-    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformOffset + vk->fragSize), paint, scissor, fringe, fringe, -1.0f);
+    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformIndex + 1), paint, scissor, fringe, fringe, -1.0f);
   } else {
-    call->uniformOffset = vknvg_allocFragUniforms(vk, 1);
-    if (call->uniformOffset == -1)
+    call->uniformIndex = vknvg_allocFragUniforms(vk, 1);
+    if (call->uniformIndex == -1)
       goto error;
     // Fill shader
-    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformOffset), paint, scissor, fringe, fringe, -1.0f);
+    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformIndex), paint, scissor, fringe, fringe, -1.0f);
   }
 
   return;
@@ -1674,19 +1672,19 @@ static void vknvg_renderStroke(void *uptr, NVGpaint *paint, NVGcompositeOperatio
 
   if (vk->flags & NVG_STENCIL_STROKES) {
     // Fill shader
-    call->uniformOffset = vknvg_allocFragUniforms(vk, 2);
-    if (call->uniformOffset == -1)
+    call->uniformIndex = vknvg_allocFragUniforms(vk, 2);
+    if (call->uniformIndex == -1)
       goto error;
 
-    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformOffset), paint, scissor, strokeWidth, fringe, -1.0f);
-    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformOffset + vk->fragSize), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f / 255.0f);
+    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformIndex), paint, scissor, strokeWidth, fringe, -1.0f);
+    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformIndex + 1), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f / 255.0f);
 
   } else {
     // Fill shader
-    call->uniformOffset = vknvg_allocFragUniforms(vk, 1);
-    if (call->uniformOffset == -1)
+    call->uniformIndex = vknvg_allocFragUniforms(vk, 1);
+    if (call->uniformIndex == -1)
       goto error;
-    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformOffset), paint, scissor, strokeWidth, fringe, -1.0f);
+    vknvg_convertPaint(vk, vknvg_fragUniformPtr(vk, call->uniformIndex), paint, scissor, strokeWidth, fringe, -1.0f);
   }
 
   return;
@@ -1720,10 +1718,10 @@ static void vknvg_renderTriangles(void *uptr, NVGpaint *paint, NVGcompositeOpera
   memcpy(&vk->verts[call->triangleOffset], verts, sizeof(NVGvertex) * nverts);
 
   // Fill shader
-  call->uniformOffset = vknvg_allocFragUniforms(vk, 1);
-  if (call->uniformOffset == -1)
+  call->uniformIndex = vknvg_allocFragUniforms(vk, 1);
+  if (call->uniformIndex == -1)
     goto error;
-  frag = vknvg_fragUniformPtr(vk, call->uniformOffset);
+  frag = vknvg_fragUniformPtr(vk, call->uniformIndex);
   vknvg_convertPaint(vk, frag, paint, scissor, 1.0f, fringe, -1.0f);
   frag->type = NSVG_SHADER_IMG;
 
@@ -1798,7 +1796,7 @@ NVGcontext *nvgCreateVk(const VKNVGCreateInfo *createInfo, int flags, VkQueue qu
   NVGcontext *ctx = NULL;
   VKNVGcontext *vk;
 
-  if (createInfo == NULL) {
+  if (createInfo == NULL || createInfo->cmdBuffers == NULL || createInfo->currentFrame == NULL) {
     return NULL;
   }
 

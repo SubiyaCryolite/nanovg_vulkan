@@ -76,14 +76,14 @@ Compile **`src/nanovg.c`** and **`src/nanovg_vk.c` as C11**. Include `nanovg.h` 
 | Field | Role |
 | --- | --- |
 | `gpu`, `device`, `renderpass`, `queue` (create arg) | Device + the render pass NanoVG will record into |
-| `cmdBuffer` | Array of command buffers, length = in-flight count |
+| `cmdBuffers` | Array of command buffers, length = in-flight count |
 | `currentFrame` | Pointer to the in-flight index (`0 .. frameCount-1`) |
 | `frameCount` | In-flight GPU buffers. `0` means use `swapchainImageCount` |
 | `commandPool` | One-shot texture uploads (`nvgCreateImage`). Prefer your graphics pool with `RESET_COMMAND_BUFFER` |
 | `graphicsQueueFamilyIndex` | Used only if `commandPool` is `VK_NULL_HANDLE` (`0` is a valid family) |
 | `ext` | Optional EDS1/EDS3 bits (or Vulkan 1.3 core dynamic state). Leave false if unused |
 
-Each frame: begin **your** render pass on `cmdBuffer[*currentFrame]`, then `nvgBeginFrame` / draw / `nvgEndFrame`. NanoVG records into that command buffer; it does not begin a second pass.
+Each frame: begin **your** render pass on `cmdBuffers[*currentFrame]`, then `nvgBeginFrame` / draw / `nvgEndFrame`. NanoVG records into that command buffer; it does not begin a second pass.
 
 Pipelines are tied to `renderpass`. After swapchain resize, wait idle, `nvgDeleteVk`, `nvgCreateVk` with the new pass, then recreate fonts/images.
 
