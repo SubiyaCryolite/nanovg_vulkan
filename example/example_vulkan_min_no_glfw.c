@@ -292,7 +292,7 @@ static void rebind_nanovg_after_swapchain(VulkanDevice *dev, VkQueue q, FrameBuf
   create_info.device = dev->device;
   create_info.gpu = dev->gpu;
   create_info.renderpass = frame_buffers->render_pass;
-  create_info.cmdBuffer = cmds;
+  create_info.cmdBuffers = cmds;
   create_info.swapchainImageCount = frame_buffers->swapchain_image_count;
   create_info.frameCount = frame_buffers->swapchain_image_count;
   create_info.currentFrame = &frame_buffers->current_frame;

@@ -24,7 +24,7 @@ typedef struct VKNVGCreateInfo {
   VkPhysicalDevice gpu;
   VkDevice device;
   VkRenderPass renderpass;
-  VkCommandBuffer *cmdBuffer; /* length = frameCount (or swapchainImageCount if frameCount is 0) */
+  VkCommandBuffer *cmdBuffers; /* length = frameCount (or swapchainImageCount if frameCount is 0) */
   uint32_t swapchainImageCount; /* used as frames-in-flight when frameCount is 0 */
   uint32_t frameCount; /* optional; 0 means use swapchainImageCount */
   uint32_t *currentFrame; /* in-flight index, 0 .. frameCount-1 */
@@ -34,7 +34,7 @@ typedef struct VKNVGCreateInfo {
   VkNvgExt ext;
 } VKNVGCreateInfo;
 
-/* createInfo is copied; cmdBuffer / currentFrame pointers must remain valid for the context lifetime. */
+/* createInfo is copied; cmdBuffers / currentFrame pointers must remain valid for the context lifetime. */
 NVGcontext *nvgCreateVk(const VKNVGCreateInfo *createInfo, int flags, VkQueue queue);
 void nvgDeleteVk(NVGcontext *ctx);
 /* Application-owned VkImage. NanoVG does not create or destroy image, view, sampler, or memory. */

@@ -287,7 +287,7 @@ int main() {
   create_info.device = device->device;
   create_info.gpu = device->gpu;
   create_info.renderpass = fb.render_pass;
-  create_info.cmdBuffer = cmd_buffer;
+  create_info.cmdBuffers = cmd_buffer;
   create_info.swapchainImageCount = fb.swapchain_image_count;
   create_info.frameCount = fb.swapchain_image_count;
   create_info.currentFrame = &fb.current_frame;
@@ -345,7 +345,7 @@ int main() {
       destroyFrameBuffers(device, &fb, executionQueue);
       fb = createFrameBuffers(device, surface, executionQueue, winWidth, winHeight, 0);
       create_info.renderpass = fb.render_pass;
-      create_info.cmdBuffer = cmd_buffer;
+      create_info.cmdBuffers = cmd_buffer;
       create_info.swapchainImageCount = fb.swapchain_image_count;
       create_info.frameCount = fb.swapchain_image_count;
       create_info.currentFrame = &fb.current_frame;
