@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef __APPLE__
@@ -28,12 +30,48 @@ typedef struct VulkanDevice {
   VkCommandPool commandPool;
 } VulkanDevice;
 
-uint32_t enabledExtensionCount = 1; // VK_KHR_SWAPCHAIN_EXTENSION_NAME
-const char *enabledExtensionName[16];
+static uint32_t vulkanChooseInstanceApiVersion(void) {
+  PFN_vkEnumerateInstanceVersion enumerateInstanceVersion =
+    (PFN_vkEnumerateInstanceVersion) vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion");
+  if (enumerateInstanceVersion == NULL) {
+    return VK_API_VERSION_1_0;
+  }
+  uint32_t version = VK_API_VERSION_1_0;
+  if (enumerateInstanceVersion(&version) != VK_SUCCESS) {
+    return VK_API_VERSION_1_0;
+  }
+  return version;
+}
 
-VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkNvgExt *ext) {
+static uint32_t vulkanEffectiveApiVersion(uint32_t instanceApiVersion, uint32_t deviceApiVersion) {
+  return instanceApiVersion < deviceApiVersion ? instanceApiVersion : deviceApiVersion;
+}
+
+static bool vulkanInstanceExtensionPresent(const char *name) {
+  uint32_t count = 0;
+  vkEnumerateInstanceExtensionProperties(NULL, &count, NULL);
+  VkExtensionProperties *props = calloc(count, sizeof *props);
+  if (props == NULL) {
+    return false;
+  }
+  vkEnumerateInstanceExtensionProperties(NULL, &count, props);
+  bool found = false;
+  for (uint32_t i = 0; i < count; i++) {
+    if (strcmp(props[i].extensionName, name) == 0) {
+      found = true;
+      break;
+    }
+  }
+  free(props);
+  return found;
+}
+
+VulkanDevice *createVulkanDevice(VkInstance instance, VkPhysicalDevice gpu, VkSurfaceKHR surface, uint32_t apiVersion, VkNvgExt *ext) {
   VulkanDevice *device = malloc(sizeof(VulkanDevice));
   memset(device, 0, sizeof(VulkanDevice));
+  if (ext != NULL) {
+    memset(ext, 0, sizeof *ext);
+  }
 
   device->gpu = gpu;
   vkGetPhysicalDeviceMemoryProperties(gpu, &device->memoryProperties);
@@ -70,58 +108,89 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkN
   queue_info.pQueuePriorities = queuePriorities;
   queue_info.queueFamilyIndex = device->graphicsQueueFamilyIndex;
 
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures = {
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
-  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features = {
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+  const uint32_t effectiveApi = vulkanEffectiveApiVersion(apiVersion, device->gpuProperties.apiVersion);
+  const bool core11 = effectiveApi >= VK_API_VERSION_1_1;
+  const bool core13 = effectiveApi >= VK_API_VERSION_1_3;
 
-  extendedDynamicStateFeatures.pNext = &extendedDynamicState3Features;
+  PFN_vkGetPhysicalDeviceFeatures2 getFeatures2 = NULL;
+  if (core11) {
+    getFeatures2 = (PFN_vkGetPhysicalDeviceFeatures2) vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2");
+  } else {
+    getFeatures2 = (PFN_vkGetPhysicalDeviceFeatures2) vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2KHR");
+  }
 
-  //Provided by VK_VERSION_1_1 or VK_KHR_get_physical_device_properties2/VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-  VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
-  physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
-  vkGetPhysicalDeviceFeatures2(gpu, &physicalDeviceFeatures2);
+  uint32_t extCount = 0;
+  vkEnumerateDeviceExtensionProperties(gpu, NULL, &extCount, NULL);
+  VkExtensionProperties *extensions = calloc(extCount, sizeof(VkExtensionProperties));
+  vkEnumerateDeviceExtensionProperties(gpu, NULL, &extCount, extensions);
 
-  bool enableDynamicState = false;
-  bool enableDynamicState3 = false;
-
-  uint32_t count = 0;
-
-  vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, NULL);
-  VkExtensionProperties *extensions = calloc(count, sizeof(VkExtensionProperties));
-  vkEnumerateDeviceExtensionProperties(gpu, NULL, &count, extensions);
-
-  physicalDeviceFeatures2.pNext = NULL;
-  extendedDynamicStateFeatures.pNext = NULL;
-  extendedDynamicState3Features.pNext = NULL;
-
-  for (uint32_t i = 0; i < count; i++) {
+  bool haveEDS1 = false;
+  bool haveEDS3 = false;
+  for (uint32_t i = 0; i < extCount; i++) {
     if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, extensions[i].extensionName) == 0) {
-      enableDynamicState = true;
-      enabledExtensionCount++;
-      physicalDeviceFeatures2.pNext = &extendedDynamicStateFeatures;
-      ext->dynamicState = extendedDynamicStateFeatures.extendedDynamicState;
+      haveEDS1 = true;
     }
     if (strcmp(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, extensions[i].extensionName) == 0) {
-      enableDynamicState3 = true;
-      enabledExtensionCount++;
-      extendedDynamicStateFeatures.pNext = &extendedDynamicState3Features;
-      ext->colorBlendEquation = extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation;
-      ext->colorWriteMask = extendedDynamicState3Features.extendedDynamicState3ColorWriteMask;
+      haveEDS3 = true;
     }
   }
   free(extensions);
 
-  uint32_t i = 0;
-  enabledExtensionName[i] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-  if (enableDynamicState) {
-    i++;
-    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds1 = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT eds3 = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+  VkPhysicalDeviceFeatures2 features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+
+  void *queryNext = NULL;
+  if (haveEDS3) {
+    eds3.pNext = queryNext;
+    queryNext = &eds3;
   }
-  if (enableDynamicState3) {
-    i++;
-    enabledExtensionName[i] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+  if (haveEDS1) {
+    eds1.pNext = queryNext;
+    queryNext = &eds1;
+  }
+  features2.pNext = queryNext;
+  if (getFeatures2 != NULL && queryNext != NULL) {
+    getFeatures2(gpu, &features2);
+  }
+
+  const bool enableEDS1 = !core13 && haveEDS1 && eds1.extendedDynamicState;
+  const bool enableEDS3 = haveEDS3 && (eds3.extendedDynamicState3ColorBlendEquation || eds3.extendedDynamicState3ColorWriteMask);
+
+  if (ext != NULL) {
+    ext->dynamicState = core13 || enableEDS1;
+    ext->colorBlendEquation = enableEDS3 && eds3.extendedDynamicState3ColorBlendEquation;
+    ext->colorWriteMask = enableEDS3 && eds3.extendedDynamicState3ColorWriteMask;
+  }
+
+  const char *enabledExtensionName[8];
+  uint32_t enabledExtensionCount = 0;
+  enabledExtensionName[enabledExtensionCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+  if (enableEDS1) {
+    enabledExtensionName[enabledExtensionCount++] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+  }
+  if (enableEDS3) {
+    enabledExtensionName[enabledExtensionCount++] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+  }
+
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds1Enable = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+  VkPhysicalDeviceExtendedDynamicState3FeaturesEXT eds3Enable = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+  eds1Enable.extendedDynamicState = VK_TRUE;
+  eds3Enable.extendedDynamicState3ColorBlendEquation = eds3.extendedDynamicState3ColorBlendEquation;
+  eds3Enable.extendedDynamicState3ColorWriteMask = eds3.extendedDynamicState3ColorWriteMask;
+
+  void *deviceNext = NULL;
+  if (enableEDS3) {
+    eds3Enable.pNext = deviceNext;
+    deviceNext = &eds3Enable;
+  }
+  if (enableEDS1) {
+    eds1Enable.pNext = deviceNext;
+    deviceNext = &eds1Enable;
   }
 
   VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
@@ -130,7 +199,7 @@ VulkanDevice *createVulkanDevice(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkN
   deviceInfo.enabledExtensionCount = enabledExtensionCount;
   deviceInfo.ppEnabledExtensionNames = enabledExtensionName;
   deviceInfo.pEnabledFeatures = NULL;
-  deviceInfo.pNext = &physicalDeviceFeatures2;
+  deviceInfo.pNext = deviceNext;
   VkResult res = vkCreateDevice(gpu, &deviceInfo, NULL, &device->device);
 
   assert(res == VK_SUCCESS);
@@ -201,7 +270,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 static VkDebugUtilsMessengerEXT debugMessenger = NULL;
 
 #ifdef GLFW_INCLUDE_VULKAN
-static VkInstance createVkInstance(bool enable_debug_layer) {
+static VkInstance createVkInstance(bool enable_debug_layer, uint32_t *outApiVersion) {
 
   // initialize the VkApplicationInfo structure
   VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -209,12 +278,17 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
   app_info.applicationVersion = 1;
   app_info.pEngineName = "NanoVG";
   app_info.engineVersion = 1;
-  app_info.apiVersion = VK_API_VERSION_1_0;
+  app_info.apiVersion = vulkanChooseInstanceApiVersion();
+  if (outApiVersion != NULL) {
+    *outApiVersion = app_info.apiVersion;
+  }
 
+  const bool needProperties2 = app_info.apiVersion < VK_API_VERSION_1_1 &&
+    vulkanInstanceExtensionPresent(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
   static const char *other_extensions[] = {
     VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
   };
-  uint32_t other_extensions_count = 1;
+  uint32_t other_extensions_count = needProperties2 ? 1 : 0;
 
   static const char *append_extensions[] = {
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
@@ -232,11 +306,7 @@ static VkInstance createVkInstance(bool enable_debug_layer) {
     apple_extensions_count = 0;
   }
 
-  uint32_t loader_version = VK_API_VERSION_1_0;
-  uint32_t version;
-  if (vkEnumerateInstanceVersion(&version) == VK_SUCCESS)
-    loader_version = version;
-  printf("Vulkan loader API version: %i.%i\n", VK_VERSION_MAJOR(loader_version), VK_VERSION_MINOR(loader_version));
+  printf("Vulkan instance API version: %i.%i\n", VK_VERSION_MAJOR(app_info.apiVersion), VK_VERSION_MINOR(app_info.apiVersion));
 
   uint32_t extensions_count = 0;
   const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&extensions_count);

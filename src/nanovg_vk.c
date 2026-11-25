@@ -312,6 +312,14 @@ static int vknvg_deleteTexture(VKNVGcontext *vk, VKNVGtexture *tex) {
   return 0;
 }
 
+static PFN_vkVoidFunction vknvg_getDeviceProc(VkDevice device, const char *coreName, const char *extName) {
+  PFN_vkVoidFunction fn = vkGetDeviceProcAddr(device, coreName);
+  if (fn == NULL && extName != NULL) {
+    fn = vkGetDeviceProcAddr(device, extName);
+  }
+  return fn;
+}
+
 static void vknvg_resolveExt(VKNVGcontext *vk) {
   vk->ext = vk->createInfo.ext;
   if (vk->ext.dynamicState && (vk->cmdSetPrimitiveTopology == NULL || vk->cmdSetStencilTestEnable == NULL || vk->cmdSetStencilOp == NULL || vk->cmdSetCullMode == NULL)) {
@@ -1822,10 +1830,10 @@ NVGcontext *nvgCreateVk(const VKNVGCreateInfo *createInfo, int flags, VkQueue qu
 
 
   vk->descLayout = (VkDescriptorSetLayout *) calloc(2, sizeof(VkDescriptorSetLayout));
-  vk->cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
-  vk->cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT");
-  vk->cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT");
-  vk->cmdSetCullMode = (PFN_vkCmdSetCullModeEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetCullModeEXT");
+  vk->cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vknvg_getDeviceProc(vk->createInfo.device, "vkCmdSetPrimitiveTopology", "vkCmdSetPrimitiveTopologyEXT");
+  vk->cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vknvg_getDeviceProc(vk->createInfo.device, "vkCmdSetStencilTestEnable", "vkCmdSetStencilTestEnableEXT");
+  vk->cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vknvg_getDeviceProc(vk->createInfo.device, "vkCmdSetStencilOp", "vkCmdSetStencilOpEXT");
+  vk->cmdSetCullMode = (PFN_vkCmdSetCullModeEXT) vknvg_getDeviceProc(vk->createInfo.device, "vkCmdSetCullMode", "vkCmdSetCullModeEXT");
   vk->cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT");
   vk->cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT");
   vknvg_resolveExt(vk);
