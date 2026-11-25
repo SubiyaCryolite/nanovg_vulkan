@@ -184,6 +184,12 @@ typedef struct VKNVGcontext {
   VkQueue queue;
 
   VkNvgExt ext;
+  PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology;
+  PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable;
+  PFN_vkCmdSetStencilOpEXT cmdSetStencilOp;
+  PFN_vkCmdSetCullModeEXT cmdSetCullMode;
+  PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation;
+  PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask;
 } VKNVGcontext;
 
 static uint32_t vknvg_frameCount(const VKNVGcontext *vk) {
@@ -306,22 +312,15 @@ static int vknvg_deleteTexture(VKNVGcontext *vk, VKNVGtexture *tex) {
   return 0;
 }
 
-static PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation;
-static PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology;
-static PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable;
-static PFN_vkCmdSetStencilOpEXT cmdSetStencilOp;
-static PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask;
-static PFN_vkCmdSetCullModeEXT cmdSetCullMode;
-
 static void vknvg_resolveExt(VKNVGcontext *vk) {
   vk->ext = vk->createInfo.ext;
-  if (vk->ext.dynamicState && (cmdSetPrimitiveTopology == NULL || cmdSetStencilTestEnable == NULL || cmdSetStencilOp == NULL || cmdSetCullMode == NULL)) {
+  if (vk->ext.dynamicState && (vk->cmdSetPrimitiveTopology == NULL || vk->cmdSetStencilTestEnable == NULL || vk->cmdSetStencilOp == NULL || vk->cmdSetCullMode == NULL)) {
     vk->ext.dynamicState = false;
   }
-  if (vk->ext.colorBlendEquation && cmdSetColorBlendEquation == NULL) {
+  if (vk->ext.colorBlendEquation && vk->cmdSetColorBlendEquation == NULL) {
     vk->ext.colorBlendEquation = false;
   }
-  if (vk->ext.colorWriteMask && cmdSetColorWriteMask == NULL) {
+  if (vk->ext.colorWriteMask && vk->cmdSetColorWriteMask == NULL) {
     vk->ext.colorWriteMask = false;
   }
 }
@@ -1823,12 +1822,12 @@ NVGcontext *nvgCreateVk(const VKNVGCreateInfo *createInfo, int flags, VkQueue qu
 
 
   vk->descLayout = (VkDescriptorSetLayout *) calloc(2, sizeof(VkDescriptorSetLayout));
-  cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
-  cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT");
-  cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT");
-  cmdSetCullMode = (PFN_vkCmdSetCullModeEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetCullModeEXT");
-  cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT");
-  cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT");
+  vk->cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
+  vk->cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT");
+  vk->cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT");
+  vk->cmdSetCullMode = (PFN_vkCmdSetCullModeEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetCullModeEXT");
+  vk->cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT");
+  vk->cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT");
   vknvg_resolveExt(vk);
 
   ctx = nvgCreateInternal(&params);
@@ -1873,17 +1872,17 @@ void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey) {
   if (vk->ext.dynamicState) {
-    cmdSetPrimitiveTopology(cmd, pipelineKey->topology);
-    cmdSetCullMode(cmd, vknvg_cullMode(pipelineKey));
+    vk->cmdSetPrimitiveTopology(cmd, pipelineKey->topology);
+    vk->cmdSetCullMode(cmd, vknvg_cullMode(pipelineKey));
     VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
-    cmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
+    vk->cmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
     if (ds.stencilTestEnable) {
-      cmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, ds.front.failOp, ds.front.passOp, ds.front.depthFailOp, ds.front.compareOp);
-      cmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, ds.back.failOp, ds.back.passOp, ds.back.depthFailOp, ds.back.compareOp);
+      vk->cmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, ds.front.failOp, ds.front.passOp, ds.front.depthFailOp, ds.front.compareOp);
+      vk->cmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, ds.back.failOp, ds.back.passOp, ds.back.depthFailOp, ds.back.compareOp);
     }
   }
   if (vk->ext.colorWriteMask) {
-    cmdSetColorWriteMask(cmd, 0, 1, &pipelineKey->colorWriteMask);
+    vk->cmdSetColorWriteMask(cmd, 0, 1, &pipelineKey->colorWriteMask);
   }
   if (vk->ext.colorBlendEquation) {
     VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
@@ -1895,6 +1894,6 @@ static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const V
         .dstAlphaBlendFactor = colorBlendAttachment.dstAlphaBlendFactor,
         .alphaBlendOp = colorBlendAttachment.alphaBlendOp,
     };
-    cmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
+    vk->cmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
   }
 }
