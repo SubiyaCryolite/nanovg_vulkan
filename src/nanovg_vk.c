@@ -311,6 +311,20 @@ static PFN_vkCmdSetPrimitiveTopologyEXT cmdSetPrimitiveTopology;
 static PFN_vkCmdSetStencilTestEnableEXT cmdSetStencilTestEnable;
 static PFN_vkCmdSetStencilOpEXT cmdSetStencilOp;
 static PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask;
+static PFN_vkCmdSetCullModeEXT cmdSetCullMode;
+
+static void vknvg_resolveExt(VKNVGcontext *vk) {
+  vk->ext = vk->createInfo.ext;
+  if (vk->ext.dynamicState && (cmdSetPrimitiveTopology == NULL || cmdSetStencilTestEnable == NULL || cmdSetStencilOp == NULL || cmdSetCullMode == NULL)) {
+    vk->ext.dynamicState = false;
+  }
+  if (vk->ext.colorBlendEquation && cmdSetColorBlendEquation == NULL) {
+    vk->ext.colorBlendEquation = false;
+  }
+  if (vk->ext.colorWriteMask && cmdSetColorWriteMask == NULL) {
+    vk->ext.colorWriteMask = false;
+  }
+}
 
 static VKNVGPipeline *vknvg_allocPipeline(VKNVGcontext *vk) {
   VKNVGPipeline *ret = NULL;
@@ -335,6 +349,9 @@ static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk, const VKNVGCreatePip
     if (a->stencilStroke != b->stencilStroke) {
       return a->stencilStroke - b->stencilStroke;
     }
+    if (a->edgeAA != b->edgeAA) {
+      return a->edgeAA - b->edgeAA;
+    }
   }
 
   if (!vk->ext.colorWriteMask) {
@@ -344,9 +361,6 @@ static int vknvg_compareCreatePipelineKey(VKNVGcontext *vk, const VKNVGCreatePip
   }
 
   if (!vk->ext.colorBlendEquation) {
-    if (a->edgeAA != b->edgeAA) {
-      return a->edgeAA - b->edgeAA;
-    }
     if (a->compositOperation.srcRGB != b->compositOperation.srcRGB) {
       return a->compositOperation.srcRGB - b->compositOperation.srcRGB;
     }
@@ -735,7 +749,7 @@ static VkPipelineDepthStencilStateCreateInfo initializeDepthStencilCreateInfo(co
   return ds;
 }
 
-static VkFlags vknvg_cullMode(VKNVGCreatePipelineKey *pipelinekey) {
+static VkCullModeFlags vknvg_cullMode(const VKNVGCreatePipelineKey *pipelinekey) {
   if (pipelinekey->stencilFill) {
     return VK_CULL_MODE_NONE;
   }
@@ -795,18 +809,16 @@ static VKNVGPipeline *vknvg_createPipeline(VKNVGcontext *vk, VKNVGCreatePipeline
   uint32_t NUM_DYNAMIC_STATES = 0;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_VIEWPORT;
   dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_SCISSOR;
-  if (vk->createInfo.ext.dynamicState) {
-    vk->ext.dynamicState = true;
+  if (vk->ext.dynamicState) {
     dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
     dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
     dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_STENCIL_OP;
+    dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_CULL_MODE;
   }
-  if (vk->createInfo.ext.colorBlendEquation) {
-    vk->ext.colorBlendEquation = true;
+  if (vk->ext.colorBlendEquation) {
     dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT;
   }
-  if (vk->createInfo.ext.colorWriteMask) {
-    vk->ext.colorWriteMask = true;
+  if (vk->ext.colorWriteMask) {
     dynamicStateEnables[NUM_DYNAMIC_STATES++] = VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
   }
 
@@ -1814,8 +1826,10 @@ NVGcontext *nvgCreateVk(const VKNVGCreateInfo *createInfo, int flags, VkQueue qu
   cmdSetPrimitiveTopology = (PFN_vkCmdSetPrimitiveTopologyEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetPrimitiveTopologyEXT");
   cmdSetStencilTestEnable = (PFN_vkCmdSetStencilTestEnableEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilTestEnableEXT");
   cmdSetStencilOp = (PFN_vkCmdSetStencilOpEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetStencilOpEXT");
+  cmdSetCullMode = (PFN_vkCmdSetCullModeEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetCullModeEXT");
   cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorBlendEquationEXT");
   cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT) vkGetDeviceProcAddr(vk->createInfo.device, "vkCmdSetColorWriteMaskEXT");
+  vknvg_resolveExt(vk);
 
   ctx = nvgCreateInternal(&params);
   if (ctx == NULL)
@@ -1858,13 +1872,20 @@ int nvgCreateImageFromHandleVk(NVGcontext *ctx, VkImage image, VkImageView view,
 void nvgDeleteVk(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
 static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const VKNVGCreatePipelineKey *pipelineKey) {
-  if (vk->ext.dynamicState && cmdSetPrimitiveTopology != NULL) {
+  if (vk->ext.dynamicState) {
     cmdSetPrimitiveTopology(cmd, pipelineKey->topology);
+    cmdSetCullMode(cmd, vknvg_cullMode(pipelineKey));
+    VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
+    cmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
+    if (ds.stencilTestEnable) {
+      cmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, ds.front.failOp, ds.front.passOp, ds.front.depthFailOp, ds.front.compareOp);
+      cmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, ds.back.failOp, ds.back.passOp, ds.back.depthFailOp, ds.back.compareOp);
+    }
   }
-  if (vk->ext.colorWriteMask && cmdSetColorWriteMask != NULL) {
+  if (vk->ext.colorWriteMask) {
     cmdSetColorWriteMask(cmd, 0, 1, &pipelineKey->colorWriteMask);
   }
-  if (vk->ext.colorBlendEquation && cmdSetColorBlendEquation != NULL) {
+  if (vk->ext.colorBlendEquation) {
     VkPipelineColorBlendAttachmentState colorBlendAttachment = vknvg_compositOperationToColorBlendAttachmentState(pipelineKey);
     VkColorBlendEquationEXT colorBlendEquation = {
         .srcColorBlendFactor = colorBlendAttachment.srcColorBlendFactor,
@@ -1875,13 +1896,5 @@ static void vknvg_setDynamicState(VKNVGcontext *vk, VkCommandBuffer cmd, const V
         .alphaBlendOp = colorBlendAttachment.alphaBlendOp,
     };
     cmdSetColorBlendEquation(cmd, 0, 1, &colorBlendEquation);
-  }
-  if (vk->ext.dynamicState && cmdSetStencilTestEnable != NULL && cmdSetStencilOp != NULL) {
-    VkPipelineDepthStencilStateCreateInfo ds = initializeDepthStencilCreateInfo(pipelineKey);
-    cmdSetStencilTestEnable(cmd, ds.stencilTestEnable);
-    if (ds.stencilTestEnable) {
-      cmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, ds.front.failOp, ds.front.passOp, ds.front.depthFailOp, ds.front.compareOp);
-      cmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, ds.back.failOp, ds.back.passOp, ds.back.depthFailOp, ds.back.compareOp);
-    }
   }
 }
